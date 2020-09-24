@@ -1,3 +1,4 @@
+// * 编译相关
 declare type CompilerOptions = {
   warn?: Function; // allow customizing warning in different environments; e.g. node
   modules?: Array<ModuleOptions>; // platform specific modules; e.g. style; class

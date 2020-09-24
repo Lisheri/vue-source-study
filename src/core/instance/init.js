@@ -14,6 +14,7 @@ let uid = 0
 
 export function initMixin (Vue: Class<Component>) {
   Vue.prototype._init = function (options?: Object) {
+    // * Component这个interface详见flow下面的component.js自定义interface Component
     const vm: Component = this
     // a uid
     vm._uid = uid++
@@ -36,7 +37,7 @@ export function initMixin (Vue: Class<Component>) {
       initInternalComponent(vm, options)
     } else {
       vm.$options = mergeOptions(
-        resolveConstructorOptions(vm.constructor),
+        resolveConstructorOptions(vm.constructor), 
         options || {},
         vm
       )

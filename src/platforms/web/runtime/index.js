@@ -1,5 +1,6 @@
 /* @flow */
 
+// * 发现这里的Vue也是从其他地方import来的
 import Vue from 'core/index'
 import config from 'core/config'
 import { extend, noop } from 'shared/util'

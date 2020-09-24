@@ -8420,4 +8420,5 @@ if (inBrowser) {
 
 /*  */
 
+// * 通过不同format可以构建出不同的版本
 module.exports = Vue;

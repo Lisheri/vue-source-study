@@ -1,3 +1,4 @@
+// * Global API 结构
 declare interface GlobalAPI {
   cid: number;
   options: Object;

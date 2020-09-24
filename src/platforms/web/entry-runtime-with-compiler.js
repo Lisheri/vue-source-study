@@ -1,9 +1,11 @@
 /* @flow */
-
+// * 使用flow进行类型检查
+// * 从入口开始
 import config from 'core/config'
 import { warn, cached } from 'core/util/index'
 import { mark, measure } from 'core/util/perf'
 
+// * 首先引入一个Vue从runtime下面的index.js中
 import Vue from './runtime/index'
 import { query } from './util/index'
 import { compileToFunctions } from './compiler/index'

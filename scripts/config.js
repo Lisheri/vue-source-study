@@ -25,9 +25,12 @@ const weexFactoryPlugin = {
   }
 }
 
+// * 所以这个alias提供了一个键名到他真实文件路径的一个映射关系，通过简单的key值去获取
 const aliases = require('./alias')
 const resolve = p => {
-  const base = p.split('/')[0]
+  const base = p.split('/')[0] // * 通过一个参数，使用斜线分割，拿到第一个值，也就是区分是web、dist、packages、weex还是server
+  // * 如果直接在aliases里面有映射关系，则在目标所在的文件路径下去寻找第一个 / 后续的文件
+  // * 若没有，则直接去外层目录下直接去寻找
   if (aliases[base]) {
     return path.resolve(aliases[base], p.slice(base.length + 1))
   } else {
@@ -37,12 +40,14 @@ const resolve = p => {
 
 const builds = {
   // Runtime only (CommonJS). Used by bundlers e.g. Webpack & Browserify
+  // * 编译配置
   'web-runtime-cjs-dev': {
-    entry: resolve('web/entry-runtime.js'),
-    dest: resolve('dist/vue.runtime.common.dev.js'),
-    format: 'cjs',
-    env: 'development',
-    banner
+    entry: resolve('web/entry-runtime.js'), // ? 入口
+    dest: resolve('dist/vue.runtime.common.dev.js'), // ? 目标，就是将入口文件最终构建出来的dist地址
+    format: 'cjs', // ? 编译的文件格式, 不同的format可以构建出不同的版本，普通的vue使用的是umd格式，像这里是cjs格式
+    env: 'development', // ? 环境
+    banner // ? 上方的一个注释，用于标识库是什么样的版本
+    // ? external 表示其余依赖项
   },
   'web-runtime-cjs-prod': {
     entry: resolve('web/entry-runtime.js'),
@@ -213,6 +218,8 @@ const builds = {
   }
 }
 
+// * 定义成一个新的rollup打包对象，比如说input才是rollup需要的格式
+// * 这里就是rollup最终需要的打包配置
 function genConfig (name) {
   const opts = builds[name]
   const config = {
@@ -263,9 +270,11 @@ function genConfig (name) {
   return config
 }
 
+// * 判断是否可以获取到node环境配置
 if (process.env.TARGET) {
   module.exports = genConfig(process.env.TARGET)
 } else {
   exports.getBuild = genConfig
+  // * 将所有的builds进行转换成rollup所需要的配置数组，然后添加到一个getAllBuilds的这样一个get方法下面去
   exports.getAllBuilds = () => Object.keys(builds).map(genConfig)
 }

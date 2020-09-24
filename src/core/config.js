@@ -1,5 +1,6 @@
 /* @flow */
 
+// * 定义了很多Vue的全局config
 import {
   no,
   noop,

@@ -1,3 +1,4 @@
+// * 选项相关的
 declare type InternalComponentOptions = {
   _isComponent: true;
   parent: Component;
