@@ -42,6 +42,7 @@ export default class Watcher {
   getter: Function;
   value: any;
 
+  // * cb表示回调函数callback
   constructor (
     vm: Component,
     expOrFn: string | Function,
@@ -50,9 +51,11 @@ export default class Watcher {
     isRenderWatcher?: boolean
   ) {
     this.vm = vm
+    // * 如果是渲染Watcher，那就在vm上添加一个_watcher, 并把Watcher实例指向vm._watcher
     if (isRenderWatcher) {
       vm._watcher = this
     }
+    // * 将当前Watcher实例push到所有的_watchers中
     vm._watchers.push(this)
     // options
     if (options) {
@@ -64,6 +67,7 @@ export default class Watcher {
     } else {
       this.deep = this.user = this.lazy = this.sync = false
     }
+    // * 将回调函数cb传给this.cb
     this.cb = cb
     this.id = ++uid // uid for batching
     this.active = true
@@ -72,10 +76,15 @@ export default class Watcher {
     this.newDeps = []
     this.depIds = new Set()
     this.newDepIds = new Set()
+    // * 如果是开发环境，就将传入的expOrFn转换为字符串
+    // * 实际上这个expression只是让你看一下是什么，并没有太大的用处，关键是下面的
+    // * toString()并不改变原来的类型, 只会返回一个新的字符串
     this.expression = process.env.NODE_ENV !== 'production'
       ? expOrFn.toString()
       : ''
     // parse expression for getter
+    // * 如果expOrFn是一个函数，那就将这个函数赋值给Watcher实例的getter
+    // * 否则就使用parsePath将expOrFn转换为一个函数在赋值给实例的getter
     if (typeof expOrFn === 'function') {
       this.getter = expOrFn
     } else {
@@ -90,6 +99,7 @@ export default class Watcher {
         )
       }
     }
+    // * 如果是lazy模式，那就不作任何操作，否则将this.get()返回值赋值给this.value
     this.value = this.lazy
       ? undefined
       : this.get()
@@ -103,6 +113,7 @@ export default class Watcher {
     let value
     const vm = this.vm
     try {
+      // * 这里使用了一次getter
       value = this.getter.call(vm, vm)
     } catch (e) {
       if (this.user) {
