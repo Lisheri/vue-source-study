@@ -13,6 +13,8 @@ import { extend, mergeOptions, formatComponentName } from '../util/index'
 let uid = 0
 
 export function initMixin (Vue: Class<Component>) {
+  // * 执行initMixin的时候就在原型上添加了一个_init方法
+  // TODO _init方法主要是做了一堆初始化的工作，比如说_uid的定义、 options的定义
   Vue.prototype._init = function (options?: Object) {
     // * Component这个interface详见flow下面的component.js自定义interface Component
     const vm: Component = this
@@ -24,12 +26,14 @@ export function initMixin (Vue: Class<Component>) {
     if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
       startTag = `vue-perf-start:${vm._uid}`
       endTag = `vue-perf-end:${vm._uid}`
+      // * 可以计算出_init函数走了几次
       mark(startTag)
     }
 
     // a flag to avoid this being observed
     vm._isVue = true
     // merge options
+    // * 可以理解为将初始化的时候传入的options，都merge到this.$options上面，也就是说，我们可以使用this.$options访问到最初定义的很多东西
     if (options && options._isComponent) {
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
@@ -43,6 +47,8 @@ export function initMixin (Vue: Class<Component>) {
       )
     }
     /* istanbul ignore else */
+    // * 在生产环境，vm就是_renderProxy
+    // * 开发环境中执行initProxy来初始化_renderProxy
     if (process.env.NODE_ENV !== 'production') {
       initProxy(vm)
     } else {
@@ -50,14 +56,14 @@ export function initMixin (Vue: Class<Component>) {
     }
     // expose real self
     vm._self = vm
-    initLifecycle(vm)
-    initEvents(vm)
-    initRender(vm)
-    callHook(vm, 'beforeCreate')
-    initInjections(vm) // resolve injections before data/props
-    initState(vm)
-    initProvide(vm) // resolve provide after data/props
-    callHook(vm, 'created')
+    initLifecycle(vm) //TODO 初始化生命周期
+    initEvents(vm)  // TODO  初始化事件中心
+    initRender(vm) // TODO 
+    callHook(vm, 'beforeCreate') // TODO 
+    initInjections(vm) // resolve injections before data/props // TODO 
+    initState(vm) // TODO 
+    initProvide(vm) // resolve provide after data/props // TODO 
+    callHook(vm, 'created') // TODO 
 
     /* istanbul ignore if */
     if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
@@ -65,7 +71,8 @@ export function initMixin (Vue: Class<Component>) {
       mark(endTag)
       measure(`vue ${vm._name} init`, startTag, endTag)
     }
-
+    // * 判断是否传入了一个DOM对象，也就是挂载的el，如果有，则调用$mount()将el挂载
+    // * $mount就是做挂载的方法
     if (vm.$options.el) {
       vm.$mount(vm.$options.el)
     }

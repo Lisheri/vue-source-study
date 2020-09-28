@@ -31,7 +31,7 @@ import {
 const sharedPropertyDefinition = {
   enumerable: true,
   configurable: true,
-  get: noop,
+  get: noop, // * 空函数noop
   set: noop
 }
 
@@ -42,14 +42,22 @@ export function proxy (target: Object, sourceKey: string, key: string) {
   sharedPropertyDefinition.set = function proxySetter (val) {
     this[sourceKey][key] = val
   }
+  // * 定义了getter和setter函数，然后通过Object.defineProperty方法，在target上修改了key的属性，为每一个key的属性都增加了一个getter和setter，同时修改为可枚举属性，描述符配置修改为可以被修改
+  // * 这里的target就是vm实例，key就是传入的每一个data的key，
+  // * 也就是说访问vm.key，访问的就是vm.sourceKey.key，这个sourceKey就是 _data, 在最开始执行initData的时候，就把data的值付给了vm._data
+  // * 因此，我们可以在vue的实例中，直接通过 this. 来访问 data下面的成员
+  // * 这一层this. 来访问data的成员，实际上就是触发了他的getter方法，通过getter方法，访问this._data[key]来拿到想要的数据
+  // * 下划线开头在编程界默认为一个私有属性，因此最好不要使用_data去访问
   Object.defineProperty(target, key, sharedPropertyDefinition)
 }
 
 export function initState (vm: Component) {
   vm._watchers = []
   const opts = vm.$options
+  // * 在initState中，如果定义了props就初始化props, 如果定义了methods，就初始化methods
   if (opts.props) initProps(vm, opts.props)
   if (opts.methods) initMethods(vm, opts.methods)
+  // * 如果定义了data，就会初始化data, 能够在生命周期中访问到data，这里就是关键
   if (opts.data) {
     initData(vm)
   } else {
@@ -109,12 +117,16 @@ function initProps (vm: Component, propsOptions: Object) {
   toggleObserving(true)
 }
 
+// * vm.$options就是初始化Vue实例的时候，传入的配置项，如data, methods,props, 生命周期等
 function initData (vm: Component) {
-  let data = vm.$options.data
+  let data = vm.$options.data // * 获取到初始化的时候传入的data
+  // * 拿到之后先做一个判断，看data是不是一个function，比较推荐的一种写法就是将data写成一个function的形式: data() {return {}}, 然后在返回一个对象
+  // * 将值赋值给临时变量data的同时，还赋值给了一个vm._data
   data = vm._data = typeof data === 'function'
-    ? getData(data, vm)
+    ? getData(data, vm) // * 如果是一个function，则调用getData方法
     : data || {}
   if (!isPlainObject(data)) {
+    // * 如果data或者返回值不是一个对象，在非生产环境中，那就抛出一个错误，data函数必须返回一个对象
     data = {}
     process.env.NODE_ENV !== 'production' && warn(
       'data functions should return an object:\n' +
@@ -123,10 +135,13 @@ function initData (vm: Component) {
     )
   }
   // proxy data on instance
+  // * 这里会取出所有data的key，然后拿到props和methods
   const keys = Object.keys(data)
   const props = vm.$options.props
   const methods = vm.$options.methods
   let i = keys.length
+  // * 遍历data的key，并且做一个循环的对比，是否在props和methods中有相同的key，如果有，就抛出一个警告
+  // * 为什么不能有重复，会冲突，就是因为他们最终都会挂载到VM实例上
   while (i--) {
     const key = keys[i]
     if (process.env.NODE_ENV !== 'production') {
@@ -144,6 +159,7 @@ function initData (vm: Component) {
         vm
       )
     } else if (!isReserved(key)) {
+      // * 通过这个proxy函数实现挂载
       proxy(vm, `_data`, key)
     }
   }
@@ -153,13 +169,16 @@ function initData (vm: Component) {
 
 export function getData (data: Function, vm: Component): any {
   // #7573 disable dep collection when invoking data getters
+  // * 响应式原理的内容
   pushTarget()
   try {
+    // * 主要就是执行data方法，改变data的this指向为vm，这个vm就是一个Vue实例全局的this对象
     return data.call(vm, vm)
   } catch (e) {
     handleError(e, vm, `data()`)
     return {}
   } finally {
+    // * 响应式原理的内容
     popTarget()
   }
 }
