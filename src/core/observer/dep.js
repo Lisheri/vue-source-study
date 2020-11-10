@@ -11,9 +11,10 @@ let uid = 0
  * directives subscribing to it.
  */
 export default class Dep {
+  // * dep类主要的目的就是建立数据和watcher之间的桥梁
   static target: ?Watcher;
   id: number;
-  subs: Array<Watcher>;
+  subs: Array<Watcher>; // * subs是一个订阅数据变化的watcher集合
 
   constructor () {
     this.id = uid++
@@ -30,6 +31,7 @@ export default class Dep {
 
   depend () {
     if (Dep.target) {
+      // * 如果存在target, 这个target就是watcher, 那么就会使用watcher.addDep(this)
       Dep.target.addDep(this)
     }
   }
@@ -53,14 +55,27 @@ export default class Dep {
 // This is globally unique because only one watcher
 // can be evaluated at a time.
 Dep.target = null
+// * watcher栈
 const targetStack = []
 
+// * 在pushTarget执行的时候将target这个watcher push到栈中
+// * 在执行popTarget的时候，在将刚刚push到栈中的watcher 取出来
 export function pushTarget (target: ?Watcher) {
+  // * 将target(watcher) push到这个targetStack中
   targetStack.push(target)
+  // * 将这个target给Dep.target
   Dep.target = target
 }
 
 export function popTarget () {
+  // * 从栈中出来
   targetStack.pop()
+  // * 将watcher栈的最顶上的元素赋值给Dep.target
+  // * 也就是说要在popTarget的时候去拿到上一次push到watcher栈里面的东西
+  /* 
+    ! 为什么需要这样做? 主要是考虑到嵌套组件的渲染过程, 组件渲染会执行mountComponent这个东西，并且是先父后子，父组件mountComponet完成后执行get方法就会执行pushTarget
+    ! 并且当儿子从mountComponent执行到pushTarget的时候，就会发现传入的target就是儿子的渲染watcher，在后面的过程中，Dep.target都会保持是他自己的渲染watcher, 直到儿子的渲染watcher走完了
+    ! 然后在执行popTarget的时候，又会将这个取出来，再次赋值给Dep.target, 巧妙的利用栈结构来保持当前使用的Dep.target在儿子执行完之后，又恢复到父亲的Dep.target这个状态
+  */
   Dep.target = targetStack[targetStack.length - 1]
 }

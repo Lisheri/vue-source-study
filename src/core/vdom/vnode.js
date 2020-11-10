@@ -48,7 +48,7 @@ export default class VNode {
     this.text = text
     this.elm = elm
     this.ns = undefined
-    this.context = context
+    this.context = context // * 所谓上下文就是当前vue实例, 如果是组件就是组件实例
     this.fnContext = undefined // * 函数式组件的作用域
     this.fnOptions = undefined
     this.fnScopeId = undefined
@@ -59,7 +59,7 @@ export default class VNode {
     this.raw = false // * 是否为原生HTML或只是普通文本，innerHTML的时候为true， textCOntent的时候为false
     this.isStatic = false // * 是否为静态节点
     this.isRootInsert = true // * 是否作为根节点插入
-    this.isComment = false // * 是否是一个注释节点
+    this.isComment = false // * 是否是一个注释节点, 这个意思是就是说两边带了<-- -->这种
     this.isCloned = false // * 是否是一个克隆节点
     this.isOnce = false // * 是否存在v-once指令
     this.asyncFactory = asyncFactory
@@ -93,6 +93,7 @@ export function createTextVNode (val: string | number) {
 // used for static nodes and slot nodes because they may be reused across
 // multiple renders, cloning them avoids errors when DOM manipulations rely
 // on their elm reference.
+// * 将当前节点的所有内容都复制给一个新的节点
 export function cloneVNode (vnode: VNode): VNode {
   const cloned = new VNode(
     vnode.tag,

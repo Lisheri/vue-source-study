@@ -70,12 +70,12 @@ export function initState (vm: Component) {
 }
 
 function initProps (vm: Component, propsOptions: Object) {
-  const propsData = vm.$options.propsData || {}
+  const propsData = vm.$options.propsData || {} // * 首先拿到props的定义
   const props = vm._props = {}
   // cache prop keys so that future props updates can iterate using Array
   // instead of dynamic object key enumeration.
   const keys = vm.$options._propKeys = []
-  const isRoot = !vm.$parent
+  const isRoot = !vm.$parent // * 如果$parent不存在那么该节点就是根节点, isRoot就是true
   // root instance props should be converted
   if (!isRoot) {
     toggleObserving(false)
@@ -159,11 +159,12 @@ function initData (vm: Component) {
         vm
       )
     } else if (!isReserved(key)) {
-      // * 通过这个proxy函数实现挂载
+      // * 通过这个proxy函数实现挂载，就是把data上的东西代理到vm实例上
       proxy(vm, `_data`, key)
     }
   }
   // observe data
+  // * 观测这个data
   observe(data, true /* asRootData */)
 }
 

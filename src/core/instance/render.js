@@ -74,6 +74,7 @@ export function renderMixin (Vue: Class<Component>) {
   Vue.prototype._render = function (): VNode {
     const vm: Component = this // * 依然是使用vm代替this
     // * 从$options中取出render和_parentVnode
+    // * 在这里就会得到一个父级占位符_parentVnode
     const { render, _parentVnode } = vm.$options
     // * 如果存在父节点
     // ! 插槽相关，先不慌
@@ -87,6 +88,7 @@ export function renderMixin (Vue: Class<Component>) {
 
     // set parent vnode. this allows render functions to have access
     // to the data on the placeholder node.
+    // * 取出来之后赋值给vm.$vnode, 它实际上就是占位符的VNode，也就是父的VNode
     vm.$vnode = _parentVnode
     // render self
     let vnode
@@ -141,6 +143,7 @@ export function renderMixin (Vue: Class<Component>) {
       vnode = createEmptyVNode()
     }
     // set parent
+    // * 最终会将渲染VNode的parent指向占位符_parentVnode, 这个占位符Vnode就是父的Vnode
     vnode.parent = _parentVnode
     // * 将最后得到的vnode返回出去，这就是vm._render()方法返回的结果
     return vnode

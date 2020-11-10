@@ -68,6 +68,7 @@ if (inBrowser && !isIE) {
 /**
  * Flush both queues and run the watchers.
  */
+// * 每一次nextTick的时候，就会执行这个函数, 在这个函数中会遍历所有的queue, 遍历过程中如果发现有watch会执行watch
 function flushSchedulerQueue () {
   currentFlushTimestamp = getNow()
   flushing = true
@@ -112,7 +113,7 @@ function flushSchedulerQueue () {
 
   // keep copies of post queues before resetting state
   const activatedQueue = activatedChildren.slice()
-  const updatedQueue = queue.slice()
+  const updatedQueue = queue.slice() // * queue.slice()定义一个副本，这个queue相当于一个watcher
 
   resetSchedulerState()
 
@@ -132,6 +133,8 @@ function callUpdatedHooks (queue) {
   while (i--) {
     const watcher = queue[i]
     const vm = watcher.vm
+    // * 不停地遍历queue，发现如果是一个_watcher(渲染watcher)并且他已经mounted过了，并且他还没有destroyed销毁, 就会触发updated
+    // * 由于vm._watcher本身就是渲染watcher拷贝过来的，因此vm._watcher === watcher如果成立，那么就说明watcher是一个渲染watcher
     if (vm._watcher === watcher && vm._isMounted && !vm._isDestroyed) {
       callHook(vm, 'updated')
     }
