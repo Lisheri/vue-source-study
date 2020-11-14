@@ -37,6 +37,7 @@ const sharedPropertyDefinition = {
 
 export function proxy (target: Object, sourceKey: string, key: string) {
   sharedPropertyDefinition.get = function proxyGetter () {
+    // ? 计算属性触发getter的时候, 由于要依赖data或者props的值, 因此, 这里也会执行，因为在获取 data 或者 props 中的值 会触发get
     return this[sourceKey][key]
   }
   sharedPropertyDefinition.set = function proxySetter (val) {
@@ -187,13 +188,18 @@ export function getData (data: Function, vm: Component): any {
 const computedWatcherOptions = { lazy: true }
 
 function initComputed (vm: Component, computed: Object) {
+  // * 初始化计算属性
   // $flow-disable-line
+  // * 向计算属性订阅者的原型上设置一个空对象, 并且将其缓存下来
+  // * 第一次出现的时候，watchers和vm._computedWatchers就是一个浅拷贝，因此后面对watchers赋值，就会改变vm._computedWatchers的值
   const watchers = vm._computedWatchers = Object.create(null)
   // computed properties are just getters during SSR
-  const isSSR = isServerRendering()
+  const isSSR = isServerRendering() // * 用于判断是不是服务端渲染
 
   for (const key in computed) {
+    // * 遍历所有计算属性(定义的)
     const userDef = computed[key]
+    // * 本身可以是一个函数，也可以是一个对象，我们一般都写得函数，当然也可以写一个对象，但是对象必须有get
     const getter = typeof userDef === 'function' ? userDef : userDef.get
     if (process.env.NODE_ENV !== 'production' && getter == null) {
       warn(
@@ -205,17 +211,19 @@ function initComputed (vm: Component, computed: Object) {
     if (!isSSR) {
       // create internal watcher for the computed property.
       watchers[key] = new Watcher(
-        vm,
-        getter || noop,
-        noop,
-        computedWatcherOptions
+        vm, // * vm实例
+        getter || noop, // * 传入的getter
+        noop, // * 传入的回调函数
+        computedWatcherOptions // * 传入的配置, 这里是{lazy: true}
       )
+      // * 在这里实例化每一个computed的watcher
     }
 
     // component-defined computed properties are already defined on the
     // component prototype. We only need to define computed properties defined
     // at instantiation here.
     if (!(key in vm)) {
+      // * computed的key不能和 data 或者 props下面的key有重复
       defineComputed(vm, key, userDef)
     } else if (process.env.NODE_ENV !== 'production') {
       if (key in vm.$data) {
@@ -232,13 +240,15 @@ export function defineComputed (
   key: string,
   userDef: Object | Function
 ) {
-  const shouldCache = !isServerRendering()
+  const shouldCache = !isServerRendering() // * 如果不是服务端渲染, 那么就需要缓存, 将 shouldCache 置为 true
   if (typeof userDef === 'function') {
+    // * 在计算属性下面直接定义的就是一个函数的情况
     sharedPropertyDefinition.get = shouldCache
       ? createComputedGetter(key)
       : createGetterInvoker(userDef)
-    sharedPropertyDefinition.set = noop
+    sharedPropertyDefinition.set = noop // * 非SSR情况下，计算属性是没有set属性的, 他只是根据订阅的数据发生变化的时候, 执行并返回一个值
   } else {
+    // * 当然，如果定义的是一个对象，那么就可以设置set和get方法，通过set方法可以对其进行赋值，但实际上直接对计算属性赋值的情况是很少的
     sharedPropertyDefinition.get = userDef.get
       ? shouldCache && userDef.cache !== false
         ? createComputedGetter(key)
@@ -259,13 +269,17 @@ export function defineComputed (
 }
 
 function createComputedGetter (key) {
+  // * 访问计算属性，就会执行以下方法并且得到他的返回值
   return function computedGetter () {
     const watcher = this._computedWatchers && this._computedWatchers[key]
     if (watcher) {
-      if (watcher.dirty) {
+      if (watcher.dirty) { // * lazy为true, 所以watcher.dirty也是true
         watcher.evaluate()
+        // * 执行完后获得value, 并且将 dirty 设置为 false
+        // * 通过getters 获取 value, 这个getters就是定义的计算属性
       }
       if (Dep.target) {
+        // * 本身就存在一个dep.target(全局update的dep)，而在执行 watcher.evaluate() 的时候, 在执行get中popTarget后又会更新Dep.target
         watcher.depend()
       }
       return watcher.value

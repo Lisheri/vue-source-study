@@ -261,7 +261,8 @@ export function mountComponent (
    */
   // * 在watcher初始化的时候，先执行一次beforeUpdate
   // * 并且在执行beforeUpdate的时候，这个时候数据更新已经完成，只是还没有更新视图
-  // TODO u pdateComponent是作为渲染Watcher的getter传入的
+  // TODO updateComponent是作为渲染Watcher的getter传入的
+  // TODO 对于渲染watcher而言，他的回调是noop，他的getter是updateComponent
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {

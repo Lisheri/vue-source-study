@@ -51,6 +51,7 @@ export class Observer {
     if (Array.isArray(value)) {
       // * value是一个数组
       if (hasProto) {
+        // * 浏览器上有原型，因此非服务端渲染, 就会 使用这个 protoAugment
         protoAugment(value, arrayMethods)
       } else {
         copyAugment(value, arrayMethods, arrayKeys)
@@ -81,6 +82,7 @@ export class Observer {
    */
   observeArray (items: Array<any>) {
     for (let i = 0, l = items.length; i < l; i++) {
+      // * 也就是说数组添加响应式，只针对数组下面是一个对象的条目，如果数组的成员是值类型就不会添加响应式
       observe(items[i])
     }
   }
@@ -94,6 +96,8 @@ export class Observer {
  */
 function protoAugment (target, src: Object) {
   /* eslint-disable no-proto */
+  // ! 这里虽然将所有数组的__proto__都修改为了 src, 这个src是只有'push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse' 这7个方法的对象
+  // ! 但是 src也就是 arrayMethods 创建的时候, 这个对象的__proto__就已经指向了Array.prototype, 因此, 尽管响应式数组的第一层方法已经改变，但其他所有的方法，都还在第二层__proto__上面
   target.__proto__ = src
   /* eslint-enable no-proto */
 }
@@ -176,7 +180,9 @@ export function defineReactive (
     val = obj[key]
   }
 
-  // * childOb是对val再一次递归观察
+  // ? childOb是对val再一次递归观察, 这里如果发现 给对象添加响应式的 那一项 同样是一个对象
+  // ? 就会执行 observe(val) 因为这个函数只有当接收的对象是一个Object, 并且不是一个VNode才会继续下去
+  // ? 执行这个函数的时候就会去执行 Observe 类的构造函数, 然后就会触发 defineReactive 或者 observeArray
   let childOb = !shallow && observe(val)
   // * 因此，data下面定义的数据无论是对象还是数组，最终都会深入到最底下一层，去添加观察者，将整个对象化为一个响应式对象
   // * 所谓响应式对象，就是在对data下的对象或者数组，从上到下所有的属性都添加getter方法和setter方法
@@ -191,6 +197,11 @@ export function defineReactive (
         ! 然后在这里把watcher订阅到数据变化中, 通过dep.depend, 调用当前watcher的addDep, addDep会执行addSub
         ! 也就是当某个数据在触发getter进行依赖收集，就是收集当前正在计算的watcher，然后通过一通操作，把它(订阅者)push到watcher集合subs中
         ! 这个watcher(订阅者)在数据变化的时候，触发setter会通知订阅者做一些其他操作
+
+        ! 换句话说，如果在Vue的代码中，将依赖收集也就是 dep.depend() 这一步给注释掉，那么响应式对象就不会做依赖收集, 
+        !在 watcher 集合 subs 中也不会存在一个需要更新watcher, 那么触发setter的时候, 这个watcher也就不会执行update了
+
+        ! 同时 Vue.set() 的触发 最终也是使用 ob.dep.notify() 来更新 subs 下面的所有watchers
       */
       // * 首先是拿到getter, 然后使用getter做计算，当然，没有getter就直接拿到这个值。毕竟getter属性主要是为了拿这个值
       const value = getter ? getter.call(obj) : val
@@ -201,6 +212,7 @@ export function defineReactive (
         dep.depend()
         if (childOb) {
           // * 如果子value是一个对象, 就会进来
+          // ! 执行dep.depend() 去收集依赖
           childOb.dep.depend()
           if (Array.isArray(value)) {
             dependArray(value)
@@ -211,8 +223,11 @@ export function defineReactive (
     },
     set: function reactiveSetter (newVal) {
       // ! setter主要是为了做派发更新
+      // ! 在触发响应式对象成员更新的时候就会触发set方法，到最后执行 dep.notify() 就是在做通知，可以更新了
+      // * 首先会先拿到原来的值
       const value = getter ? getter.call(obj) : val
       /* eslint-disable no-self-compare */
+      // * 然后将新的值和旧的值作对比，如果他们相等或者新的值立即发生变化并且旧的值被取代，都会立即返回
       if (newVal === value || (newVal !== newVal && value !== value)) {
         return
       }
@@ -221,13 +236,17 @@ export function defineReactive (
         customSetter()
       }
       // #7981: for accessor properties without setter
+      // * 如果原来的对象上面存在getter但是没有setter就直接返回
       if (getter && !setter) return
       if (setter) {
+        // * 这两个操作都是将新的值给赋值给旧的值
         setter.call(obj, newVal)
       } else {
         val = newVal
       }
+      // * 如果新的值使用一个对象，那么就会触发observe将新的值变成一个响应式的值
       childOb = !shallow && observe(newVal)
+      // ! dep.notify()就是派发更新的过程
       dep.notify()
     }
   })
@@ -239,22 +258,28 @@ export function defineReactive (
  * already exist.
  */
 export function set (target: Array<any> | Object, key: any, val: any): any {
+  // * set函数接收三个参数，第一个可以是数组也可以是Object，第二参数是任意类型，第三个参数也是任意类型
   if (process.env.NODE_ENV !== 'production' &&
     (isUndef(target) || isPrimitive(target))
   ) {
+    // * 第一个参数如果是基础类型或者是undefined, 那么就会有一个警告，因为对于基础类型或者不传入第一个参数，这个方法都没有任何意义
     warn(`Cannot set reactive property on undefined, null, or primitive value: ${(target: any)}`)
   }
   if (Array.isArray(target) && isValidArrayIndex(key)) {
-    target.length = Math.max(target.length, key)
-    target.splice(key, 1, val)
+    // ? isValidArrayIndex 确保 key 是一个大于等于0的整数数字
+    target.length = Math.max(target.length, key) // * 首先修改数组的长度，他的长度取决于key和长度哪个更大，如果key更大，就说明在新增值
+    target.splice(key, 1, val) // * 然后将这个值直接插入到 key 这个 index 的后面, 或者修改该 index 的 值, 这种方式可以触发重新渲染
     return val
   }
   if (key in target && !(key in Object.prototype)) {
+    // * 首先判断key值是否存在于目标对象中，如果存在，那么使用target[key] = val 这种方式以及可以触发重新渲染了
     target[key] = val
     return val
   }
-  const ob = (target: any).__ob__
+  const ob = (target: any).__ob__ // * 否则就在此处拿到taget.__ob__属性
   if (target._isVue || (ob && ob.vmCount)) {
+    // * 如果target是一个Vue实例，或者ob上面有vmCount(有 vmCount 表示target是一个root data 也就是说是我们直接定义在 data 下面的)
+    // * 这两种条件满足任何一个都不行, 我们要避免对Vue实例或者root data 做Vue.set()
     process.env.NODE_ENV !== 'production' && warn(
       'Avoid adding reactive properties to a Vue instance or its root $data ' +
       'at runtime - declare it upfront in the data option.'
@@ -262,10 +287,13 @@ export function set (target: Array<any> | Object, key: any, val: any): any {
     return val
   }
   if (!ob) {
+    // * 如果没有ob，也就是说 target 并不是一个响应式对象, 那么作为普通对象, 直接赋值就可以了
     target[key] = val
     return val
   }
+  // * 如果 target 是观测值, 这里将新的值也变成一个响应式对象
   defineReactive(ob.value, key, val)
+  // * 手动调用 ob.dep.notify(), 也就是对所有的 watcher 队列中的内容执行update
   ob.dep.notify()
   return val
 }
@@ -274,6 +302,7 @@ export function set (target: Array<any> | Object, key: any, val: any): any {
  * Delete a property and trigger change if necessary.
  */
 export function del (target: Array<any> | Object, key: any) {
+  // * 通过这个方法去删除一个对象或者数组上的成员，也可以触发依赖更新的派发
   if (process.env.NODE_ENV !== 'production' &&
     (isUndef(target) || isPrimitive(target))
   ) {

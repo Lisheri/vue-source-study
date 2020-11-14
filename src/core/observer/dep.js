@@ -38,14 +38,18 @@ export default class Dep {
 
   notify () {
     // stabilize the subscriber list first
+    // * 这是一层简单的深拷贝
     const subs = this.subs.slice()
     if (process.env.NODE_ENV !== 'production' && !config.async) {
       // subs aren't sorted in scheduler if not running async
       // we need to sort them now to make sure they fire in correct
       // order
+      // * 如果config.async为false, 就为订阅者排序
       subs.sort((a, b) => a.id - b.id)
     }
+    // * 遍历所有的订阅者，为他们进行更新
     for (let i = 0, l = subs.length; i < l; i++) {
+      // * subs中的数据都是watcher的实例, 所以subs[i].update()就是Watcher类中的update
       subs[i].update()
     }
   }
