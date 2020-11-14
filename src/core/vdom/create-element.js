@@ -138,20 +138,26 @@ export function _createElement (
         undefined, undefined, context
       )
     } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+      // * 在上面判断中，可以得到一个经历过component所有options并且合并了Vue构造函数的一个构造器
+      // * 全局注册，就会走这里
       // component
       // * 组件VNode
+      // * 如果这个tag是一个组件标签，虽然是string类型，但是也会走入这里
       vnode = createComponent(Ctor, data, context, children, tag)
     } else {
       // unknown or unlisted namespaced elements
       // check at runtime because it may get assigned a namespace when its
       // parent normalizes children
       // * 如果是不认识的，就直接创建
+      // * 也就是在开发过程中，如果你写了一个没有注册的组件，那么在element中，就会有一个纯粹的组件名的标签，而不会编译任何东西
       vnode = new VNode(
         tag, data, children,
         undefined, undefined, context
       )
     }
   } else {
+    // * 局部注册
+    // * 如果该标签直接就是一个导入的组件，直接进入此处，通过createComponent创建组件VNode
     // direct component options / constructor
     vnode = createComponent(tag, data, context, children)
   }

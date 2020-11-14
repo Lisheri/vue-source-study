@@ -51,6 +51,7 @@ export function initGlobalAPI (Vue: GlobalAPI) {
     return obj
   }
 
+  // * 创建一个空对象
   Vue.options = Object.create(null)
   // * 在ASSET_TYPES中定义了三个方法: component, directive 和 filter 
   ASSET_TYPES.forEach(type => {
@@ -59,6 +60,7 @@ export function initGlobalAPI (Vue: GlobalAPI) {
 
   // this is used to identify the "base" constructor to extend all plain-object
   // components with in Weex's multi-instance scenarios.
+  // * 在此处初始化Vue的options,将options._base设置为Vue，然后在初始化的时候合并options
   Vue.options._base = Vue
   // * 这里将base指向Vue</T>
   // * builtInComponents是一个内置组件, 通过extend方法将其拓展到了components下面

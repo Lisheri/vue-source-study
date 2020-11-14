@@ -1,5 +1,6 @@
 /* @flow */
 
+// * 该模块中包含了几乎所有的合并策略
 import config from '../config'
 import { warn } from './debug'
 import { set } from '../observer/index'
@@ -26,7 +27,7 @@ import {
  * how to merge a parent option value and a child option
  * value into the final value.
  */
-const strats = config.optionMergeStrategies
+const strats = config.optionMergeStrategies // * Object.create(null) 是一个空对象
 
 /**
  * Options with restrictions
@@ -147,6 +148,9 @@ function mergeHook (
   parentVal: ?Array<Function>,
   childVal: ?Function | ?Array<Function>
 ): ?Array<Function> {
+  // * 如果childVal不存在，直接就返回parentVal
+  // * 如果childVal存在且parentVal存在，则两个直接合并
+  // * 如果childVal存在但parentVal不存在，则判断childVal是否为数组，如果是，则直接res就是childVal，如果不是，则将其添加到一个空数组的第一个
   const res = childVal
     ? parentVal
       ? parentVal.concat(childVal)
@@ -154,12 +158,14 @@ function mergeHook (
         ? childVal
         : [childVal]
     : parentVal
+  // * 处理res，这个res是一个Array<Function>
   return res
     ? dedupeHooks(res)
     : res
 }
 
 function dedupeHooks (hooks) {
+  // * 去重,防止儿子和爹合并的时候产生了重复的hook
   const res = []
   for (let i = 0; i < hooks.length; i++) {
     if (res.indexOf(hooks[i]) === -1) {
@@ -170,6 +176,7 @@ function dedupeHooks (hooks) {
 }
 
 LIFECYCLE_HOOKS.forEach(hook => {
+  // * 这里表示为strats中不同的hook都分配mergeHook 
   strats[hook] = mergeHook
 })
 
@@ -186,6 +193,9 @@ function mergeAssets (
   vm?: Component,
   key: string
 ): Object {
+  // * 在这个合并策略中，会先构造一个parentVal
+  // * 这个Object.create()方法，会把传入的对象，挂载新的对象的原型上面
+  // * 静态类型合并比如说components, directive和filter之类的属性合并, 会执行这个合并策略, 将一些如keepalive之类的静态属性，添加到合并对象options的原型上
   const res = Object.create(parentVal || null)
   if (childVal) {
     process.env.NODE_ENV !== 'production' && assertObjectType(key, childVal, vm)
@@ -283,6 +293,7 @@ export function validateComponentName (name: string) {
       'should conform to valid custom element name in html5 specification.'
     )
   }
+  // * 这里说明使用了保留标签或者内建标签当做Component使用
   if (isBuiltInTag(name) || config.isReservedTag(name)) {
     warn(
       'Do not use built-in or reserved HTML elements as component ' +
@@ -391,6 +402,7 @@ export function mergeOptions (
   vm?: Component
 ): Object {
   if (process.env.NODE_ENV !== 'production') {
+    // * 对组件定义做了一层校验，校验是否使用不规则标签，或者使用内建标签或保留标签做为组件的占位符
     checkComponents(child)
   }
 
@@ -398,6 +410,7 @@ export function mergeOptions (
     child = child.options
   }
 
+  // * 一通序列化操作
   normalizeProps(child, vm)
   normalizeInject(child, vm)
   normalizeDirectives(child)
@@ -406,28 +419,35 @@ export function mergeOptions (
   // but only if it is a raw options object that isn't
   // the result of another mergeOptions call.
   // Only merged options has the _base property.
+  // * 这个_base指代的是Vue构造函数本身，在initGlobalApi的时候加入到Vue构造函数的options上，若是组件的options上存在_base，那么就说明这个组件的options已经合并了构造函数的options
   if (!child._base) {
     if (child.extends) {
       parent = mergeOptions(parent, child.extends, vm)
     }
     if (child.mixins) {
+      // * 这里的mixins如果存在，就会遍历mixins中定义的对象，然后递归合并options
       for (let i = 0, l = child.mixins.length; i < l; i++) {
         parent = mergeOptions(parent, child.mixins[i], vm)
       }
     }
   }
-
+  
+  // * 这个空对象就是用来作为最后返回的基本options
   const options = {}
   let key
+  // * 首先遍历parent中的所有key
   for (key in parent) {
     mergeField(key)
   }
   for (key in child) {
+    // * 如果parent上没有这个key就再次调用mergeField
     if (!hasOwn(parent, key)) {
       mergeField(key)
     }
   }
   function mergeField (key) {
+    // * strats在前面执行的时候，上面就通过不同的key添加了很多合并策略
+    // * defaultStrat表示有儿子用儿子，没有儿子用爹的一种合并策略
     const strat = strats[key] || defaultStrat
     options[key] = strat(parent[key], child[key], vm, key)
   }
@@ -449,14 +469,23 @@ export function resolveAsset (
   if (typeof id !== 'string') {
     return
   }
+  // * 这里的options是vm实例上的options，在初始化globalAPI的时候，经历过一次合并，Vue的options上面继承了这个东西,所以下面寻找的都是执行Vue[type]传入的definition
+  // * 这个definition合并过Vue构造函数
+  // * 因此这里返回的res，也是一个继承了Vue构造函数的一个构造器
   const assets = options[type]
   // check local registration variations first
+  // * 首先如果在options对应的type上面有id就直接返回了
   if (hasOwn(assets, id)) return assets[id]
+  // * 将id转换为驼峰
   const camelizedId = camelize(id)
+  // * 如果这个options上面有camlizedId在options对应的type上面也有，同样直接返回
   if (hasOwn(assets, camelizedId)) return assets[camelizedId]
+  // * 将camelizedId的首字母大写，也就是将驼峰的首字母转换为大写
   const PascalCaseId = capitalize(camelizedId)
+  // * 如果options上面有PascalCaseId同样直接返回对应的PascalCaseId
   if (hasOwn(assets, PascalCaseId)) return assets[PascalCaseId]
   // fallback to prototype chain
+  // * 上面的都找不到，就去原型上面找
   const res = assets[id] || assets[camelizedId] || assets[PascalCaseId]
   if (process.env.NODE_ENV !== 'production' && warnMissing && !res) {
     warn(

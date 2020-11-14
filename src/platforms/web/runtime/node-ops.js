@@ -1,7 +1,9 @@
 /* @flow */
 
+// * 这里面都是定义的一些DOM相关的操作
 import { namespaceMap } from 'web/util/index'
 
+// * 实际上就是原生api, 然后修复了对带有Mutiple的select标签的问题
 export function createElement (tagName: string, vnode: VNode): Element {
   const elm = document.createElement(tagName)
   if (tagName !== 'select') {

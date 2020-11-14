@@ -33,6 +33,13 @@ export function handleError (err: Error, vm: any, info: string) {
   }
 }
 
+/**
+ * @param handler 生命周期函数
+ * @param context vm实例
+ * @param null
+ * @param vm 当前实例
+ * @param info 生命周期hook的名称 为`${名称} hook`
+ */
 export function invokeWithErrorHandling (
   handler: Function,
   context: any,
@@ -42,6 +49,9 @@ export function invokeWithErrorHandling (
 ) {
   let res
   try {
+    // * 主要是执行该生命周期方法，通过args来判断，是否需要传递参数, 如果为null，则不需要传递任何参数，直接执行生命周期方法
+    // * 同时处理一些抛错
+    // * context代表的就是传入的vm实例，因此在组件中调用生命周期函数的时候，可以在内部使用this指向组件的全局vm
     res = args ? handler.apply(context, args) : handler.call(context)
     if (res && !res._isVue && isPromise(res) && !res._handled) {
       res.catch(e => handleError(e, vm, info + ` (Promise/async)`))

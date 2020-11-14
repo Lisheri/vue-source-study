@@ -22,6 +22,7 @@ export let activeInstance: any = null
 export let isUpdatingChildComponent: boolean = false
 
 export function setActiveInstance(vm: Component) {
+  // * 在组件渲染的过程中，之所以将vm作为activeInstance，就是因为组件是作为当前实例的儿子，因此，会把当前实例当成父级vm实例，保存下来
   const prevActiveInstance = activeInstance
   activeInstance = vm
   return () => {
@@ -30,20 +31,30 @@ export function setActiveInstance(vm: Component) {
 }
 
 export function initLifecycle (vm: Component) {
+  //  * 建立父子关系
+  // * 组件从VNode转换为real DOM的时候，执行以下内容就是在__patch__的过程中, 因此activeInstance就是当前vm实例
   const options = vm.$options
 
   // locate first non-abstract parent
+  // * 由于options合并过，因此这个options包含了Vue的options以及原来的五个成员，parent就代表当前层级的vm实例
   let parent = options.parent
   if (parent && !options.abstract) {
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent
     }
+    // * parent是当期实例vm，因为子组件的创建是基于当前组件的vm创建的
+    // * 在这里会见将子组件的vmpush到parent的$children中
+    // * 正因为如此，我们才可以在父亲中通过this.$children去操作子组件
     parent.$children.push(vm)
   }
 
+  // * 在这里将parent也就是当前组件的vm，赋值给vm.$parent
+  // * 所以才可以在子组件中通过this.$parent去直接操作父组件
   vm.$parent = parent
+  // * 在这里做一步判断，判断parent是否存在，如果不存在，说明当前组件就是顶级组件，那么当前组件vm实例的$root就是当前组件，否则就取父节点的$root
   vm.$root = parent ? parent.$root : vm
 
+  // * 初始化当前组件的$children和$refs
   vm.$children = []
   vm.$refs = {}
 
@@ -53,24 +64,38 @@ export function initLifecycle (vm: Component) {
   vm._isMounted = false
   vm._isDestroyed = false
   vm._isBeingDestroyed = false
+  // * 到此为止，生命周期初始化完成
 }
 
 export function lifecycleMixin (Vue: Class<Component>) {
   Vue.prototype._update = function (vnode: VNode, hydrating?: boolean) {
-    const vm: Component = this
-    const prevEl = vm.$el
-    const prevVnode = vm._vnode
+    // * update是Vue的私有方法，他所做的事情，就是把VNode渲染为一个真实的DOM，它被调用的时机有两个，一个是首次渲染的时候，一个是数据更新的时候
+    const vm: Component = this // * 当前组件的实例
+    const prevEl = vm.$el // * 指向真实DOM
+    const prevVnode = vm._vnode // * 上一次的VNode，作对比时使用。
+    /* 以上三个变量在首次渲染的时候，都是空值，暂时用不上 */
+    // * 子组件patch的时候执行这个，会将子组件的vm赋值给activeInstance
+    // * js的执行是同步的，而组件的创建就是一个深度遍历的过程，在父亲创建的时候如果有组件的创建，就会在父亲patch的时候进入创建组件的部分，然后组件创建的时候内部还有，也会继续走进去，走到这里来，会将父亲的vm一级一级传下去
     const restoreActiveInstance = setActiveInstance(vm)
+    // * 在这里将当前节点的vnode赋值给_vnode
+    // * $vnode是一个占位符Vnode，而_vnode是一个渲染vnode负责渲染的，所谓占位符，也就是那个组件名字的标签，比如一个组件叫做HelloWorld, <hello-world />这就是一个占位符
     vm._vnode = vnode
     // Vue.prototype.__patch__ is injected in entry points
     // based on the rendering backend used.
+    // * 所以在除此渲染的时候这个prevVnode是空值, 这个判断会直接进去, 表明是初次渲染
     if (!prevVnode) {
       // initial render
+      // * 子组件渲染的时候会再次调用patch，子组件创建的时候$el是undefined, vnode代表自己的虚拟dom， hydrating是false
+      // * 首次执行__patch__的时候，第一个参数传入的是真实DOM, 第二个是渲染生成的vnode，后面两个都是false
       vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false /* removeOnly */)
     } else {
       // updates
       vm.$el = vm.__patch__(prevVnode, vnode)
     }
+    // * 等待整个__patch__执行完了，才会执行setActiveInstance返回的那个闭包函数，将activeInstance设置为null
+    // * 也就是说在整个__patch__的过程中，activeInstance都是vm实例
+    // * 并且在这里并不一定是设置为空值，设置为空值是在最外层，而实际上，他应该恢复到上一级的实例
+    // * 始终保持activeInstance和prevActiveInstance是一个父子关系 
     restoreActiveInstance()
     // update __vue__ reference
     if (prevEl) {
@@ -88,6 +113,8 @@ export function lifecycleMixin (Vue: Class<Component>) {
   }
 
   Vue.prototype.$forceUpdate = function () {
+    // * 调取$forceUpdate的时候会去执行渲染watcher的update()
+    // * 也就是会执行这个vm._update(vm._render(), hydrating), 去强制update一次
     const vm: Component = this
     if (vm._watcher) {
       vm._watcher.update()
@@ -95,6 +122,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
   }
 
   Vue.prototype.$destroy = function () {
+    // * 组件销毁会执行这个函数，也就是说在组件销毁之前，会先执行beforeDestroy
     const vm: Component = this
     if (vm._isBeingDestroyed) {
       return
@@ -104,6 +132,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
     // remove self from parent
     const parent = vm.$parent
     if (parent && !parent._isBeingDestroyed && !vm.$options.abstract) {
+      // * dom的移除, 将父子关系移除
       remove(parent.$children, vm)
     }
     // teardown watchers
@@ -122,10 +151,13 @@ export function lifecycleMixin (Vue: Class<Component>) {
     // call the last hook...
     vm._isDestroyed = true
     // invoke destroy hooks on current rendered tree
+    // * 通过将patch方法的第二个参数vnode传递为null，进入patch中一个递归销毁逻辑，递归的绝后
     vm.__patch__(vm._vnode, null)
+    // * 销毁完了，就会执行destroyed
     // fire destroyed hook
     callHook(vm, 'destroyed')
     // turn off all instance listeners.
+    // * 取消挂载
     vm.$off()
     // remove __vue__ reference
     if (vm.$el) {
@@ -133,6 +165,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
     }
     // release circular reference (#6759)
     if (vm.$vnode) {
+      // * 将该节点从VDOM树上面移除
       vm.$vnode.parent = null
     }
   }
@@ -169,8 +202,10 @@ export function mountComponent (
       }
     }
   }
-  // * 生命周期相关问题
-  callHook(vm, 'beforeMount')
+  // * 在此处执行beforeMount
+  // * 和mounted不同的是，beforeMount这个钩子函数，是先父后子的
+  // * 因为mountComponent的执行，是一层一层向内部执行的
+  callHook(vm, 'beforeMount') 
 
   let updateComponent
   /* istanbul ignore if */
@@ -224,6 +259,10 @@ export function mountComponent (
    * @param options 一些配置
    * @param isRenderWatcher 是否为渲染Watcher，此处为true
    */
+  // * 在watcher初始化的时候，先执行一次beforeUpdate
+  // * 并且在执行beforeUpdate的时候，这个时候数据更新已经完成，只是还没有更新视图
+  // TODO updateComponent是作为渲染Watcher的getter传入的
+  // TODO 对于渲染watcher而言，他的回调是noop，他的getter是updateComponent
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {
@@ -237,6 +276,7 @@ export function mountComponent (
   // mounted is called for render-created child components in its inserted hook
   if (vm.$vnode == null) {
     vm._isMounted = true
+    // * 执行mounted的时期有两个，第一个就是此处，如果实例初始化的时候没有$vnode说明这是一个根节点，在mountComponent中就会触发mounted周期的函数
     callHook(vm, 'mounted')
   }
   return vm
@@ -364,9 +404,11 @@ export function deactivateChildComponent (vm: Component, direct?: boolean) {
 }
 
 export function callHook (vm: Component, hook: string) {
+  // * callHook接收两个参数，第一个是vue实例，第二个是生命周期
   // #7573 disable dep collection when invoking lifecycle hooks
   pushTarget()
-  const handlers = vm.$options[hook]
+  const handlers = vm.$options[hook] // * 这个handlers是一个数组, vm.$options经历过合并，将相同生命周期的方法合并到一起
+  // * 这个合并很好理解，比如组件内部有created方法，同时组件引入一个mixin中也有一个created方法，这个时候，会将组件的created方法和mixin中的created方法进行合并，当然这个合并就是按顺序执行两个方法
   const info = `${hook} hook`
   if (handlers) {
     for (let i = 0, j = handlers.length; i < j; i++) {
@@ -374,6 +416,7 @@ export function callHook (vm: Component, hook: string) {
     }
   }
   if (vm._hasHookEvent) {
+    // * 通过$emit触发$on的hook方法
     vm.$emit('hook:' + hook)
   }
   popTarget()
