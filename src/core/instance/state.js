@@ -280,6 +280,7 @@ function createComputedGetter (key) {
       }
       if (Dep.target) {
         // * 本身就存在一个dep.target(全局update的dep)，而在执行 watcher.evaluate() 的时候, 在执行get中popTarget后又会更新Dep.target
+        // * 说直白点就是渲染watcher
         watcher.depend()
       }
       return watcher.value
@@ -322,7 +323,9 @@ function initMethods (vm: Component, methods: Object) {
 }
 
 function initWatch (vm: Component, watch: Object) {
+  // * 侦听属性的初始化
   for (const key in watch) {
+    // * 遍历所有的watch, 拿到每一个设置的侦听属性
     const handler = watch[key]
     if (Array.isArray(handler)) {
       for (let i = 0; i < handler.length; i++) {
@@ -340,6 +343,8 @@ function createWatcher (
   handler: any,
   options?: Object
 ) {
+  // ! 这里, 如果直接定义的 userWatcher 就是一个函数, 那么以下两个判断都不会走进去, options 就是 undefined
+  // ! 在new Watcher 的时候, 执行 Watcher 类的构造器, 此时 options 那个判断中会将所有的设置为false
   if (isPlainObject(handler)) {
     options = handler
     handler = handler.handler

@@ -98,6 +98,18 @@ export default class Watcher {
       this.getter = expOrFn
     } else {
       this.getter = parsePath(expOrFn)
+      // TODO parsePath 返回一个函数,在userWatcher中，expOrFn代表的watch变量的键名
+      // TODO 最后这个键名会变成一个数组，数组中只有一个成员就是这个键名
+      // TODO 就是以下函数, 其中 segments 就是 ['expOrFn'], 毕竟在userWatcher 中 expOrFn就代表的是 userWatcher的键名
+      /* 
+      *  function (obj) {
+      *    for (let i = 0; i < segments.length; i++) {
+      *      if (!obj) return
+      *      obj = obj[segments[i]]
+      *    }
+      *    return obj
+      *  }
+      */
       if (!this.getter) {
         this.getter = noop
         process.env.NODE_ENV !== 'production' && warn(
@@ -109,6 +121,7 @@ export default class Watcher {
       }
     }
     // * 如果是lazy模式，那就不作任何操作，否则将this.get()返回值赋值给this.value
+    // TODO 在new Watcher的时候, 就会对userWatcher进行一次求值
     this.value = this.lazy
       ? undefined
       : this.get()
@@ -118,7 +131,7 @@ export default class Watcher {
    * Evaluate the getter, and re-collect dependencies.
    */
   get () {
-    pushTarget(this)
+    pushTarget(this) // TODO 在new Watcher的时候执行 get 方法, 这个时候这个 this 代表就是当前 watcher
     let value
     const vm = this.vm
     try {
@@ -131,6 +144,14 @@ export default class Watcher {
       // TODO 也就是说，render执行过程中，访问getter属性，最终就是将订阅者watcher添加到订阅者集合subs里面去，作为当前数据的桥梁
       // TODO 然后到最后会判断是否需要深层次的订阅, 完了之后，就会执行popTarget，将当前使用的订阅者watcher给pop出去，恢复之前的watcher栈，保持Dep(类)上面的target(watcher)是最初的状态
       // TODO 在派发更新的时候，执行vm._update方法patch出真实DOM和首次渲染，并不是完全相同的
+
+      // TODO 这里的 vm 是当前的 vue 实例
+      // TODO 执行 userWatcher 的 get 方法到此处时, 通过这个 getter 传入一个当前 vue 实例, 实际上就是访问 this[key], 这里的 key 就是 userWatcher 的键名
+      // TODO 然后这一次访问, 就会触发被监听对象的getter, 因此就会触发他的依赖收集
+      // TODO 这样就会触发监听对象的 dep.depend(), 并且之前如之前一样, 监听对象getter执行完拿到值之后, dep.Target 又恢复成了 userWatcher
+      // TODO 这样 监听对象执行 dep.depend() 的时候 就会在监听对象的 dep.subs 中 加入 userWatcher 的依赖
+      // TODO 然后在 监听对象值改变的时候, 就会通过 dep.notify() 触发 userWatcher 的 update()
+      // TODO 就会执行 watcher.run() 或者 queueWatcher(), 如果执行 queueWatcher() 那么就会在下一次执行 flushSchedulerQueue 的时候执行watcher.run
       value = this.getter.call(vm, vm)
     } catch (e) {
       if (this.user) {
@@ -231,6 +252,7 @@ export default class Watcher {
         isObject(value) ||
         this.deep
       ) {
+        // ! 这里可以看出 如果我们监听的值是一个对象, 或者说 设置了deep属性为true, 那么就会直接进入回调
         // set new value * 设置一个新的值
         const oldValue = this.value
         this.value = value
@@ -238,7 +260,6 @@ export default class Watcher {
         // TODO 执行get的时候，就会触发getter, 对于一个渲染watcher就是lifecycle中的updateComponent, 然后触发render得到新的VNode再出发update去patch出真实节点更新DOM
         // TODO 对于user Watcher来说callback就是我们定义的那个函数handler(newVal, oldVal) {...} 这个就是他的cb
         if (this.user) {
-          // ! 如果是userWatcher那么在执行回调的同时还有一个handleError, 所谓 userWatcher 就是 watch 属性下面定义的类型
           try {
             // * watch一个值的回调，就是执行的这个步骤，我们可以拿到一个新的值和一个旧的值，就是因为将新的值和旧的值都作为一个参数传递进来了
             // ? 因此在 userWatcher 中如果对他watch的值再一次进行更新，那么就会在 flushSchedulerQueue 执行的时候， 再一次触发 queueWatcher 
@@ -262,6 +283,14 @@ export default class Watcher {
    */
   evaluate () {
     // TODO 在计算属性的getter执行的过程中，因为要依赖 props 或者 data 上面的值, 那么这个计算属性的getter触发的时候, 实际上还会触发非计算属性的getter
+    // TODO 计算属性的 get 触发时, 首先会更新Dep.target 变为计算属性的watcher, 并且在触发 getter 的同时, 获取依赖项的值就会触发依赖项的 getter ,然后它所依赖的data或者props就会
+    // TODO 执行他自己的getter进行依赖收集, 这个时候执行 depend , 就会将计算属性的 watcher 添加到自己的 dep.subs 中
+    // TODO 这样当依赖项发生改变, 就会执行依赖项的 setter 在其中触发dep.notify(), 然后执行所有watcher的更新
+    // TODO 更新过程中, 会将subs下面所有 watcher 都执行 update, 这样计算属性watcher的 dirty 又回到了true
+    // TODO 渲染页面时, 会重新去拿计算属性的值，此时由于 dirty 为 true, 就会触发watcher.evalute() 这个方法，重新去执行getter方法拿到新的值, 并且将 dirty 重新置为true
+    // TODO 实际上，还有一个最关键的一步操作，就是渲染watcher的触发，是在所有watcher的最后面，因为他的id最大，并且他在最后会通过nextTick去触发 flushSchedulerQueue() 去执行访问queue中所有watcher的run 再去触发get，而计算属性的get，也是在此处触发的。
+    // TODO 因此，哪怕依赖的值并没有改变，只要页面的render-watcher触发过，就会重新get一次计算属性，当然，依赖值没有派发更新，那么计算属性的dirty就还是false，并不会触发他的更新，也就不会执行定义的getter函数了
+    // TODO 同时触发依赖项的 getter 重新收集依赖又一次将 计算属性的watcher 添加到了自己的 dep.subs 中
     this.value = this.get()
     this.dirty = false
   }
