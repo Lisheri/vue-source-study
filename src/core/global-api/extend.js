@@ -111,6 +111,8 @@ function initProps (Comp) {
 function initComputed (Comp) {
   const computed = Comp.options.computed
   for (const key in computed) {
+    // * 组件的computed初始化，是往组件的原型上定义了 计算属性的 key
+    // * 往原型上定义, 这样组件共享的时候, 就避免了重复的往实例上去定义getter
     defineComputed(Comp.prototype, key, computed[key])
   }
 }
