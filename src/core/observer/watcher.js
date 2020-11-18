@@ -163,6 +163,8 @@ export default class Watcher {
       // "touch" every property so they are all tracked as
       // dependencies for deep watching
       if (this.deep) {
+        // * 递归的把每一个数组或者对象下的所有值都跑一遍，目的是为了触发每一个值的getter来收集依赖
+        // * 这样只要deep下面的监听对象发生了改变, 就会触发setter去派发更新, 然后就会触发userWatcher的this.run(), 去执行this.cb
         traverse(value)
       }
       popTarget()
@@ -287,7 +289,7 @@ export default class Watcher {
     // TODO 执行他自己的getter进行依赖收集, 这个时候执行 depend , 就会将计算属性的 watcher 添加到自己的 dep.subs 中
     // TODO 这样当依赖项发生改变, 就会执行依赖项的 setter 在其中触发dep.notify(), 然后执行所有watcher的更新
     // TODO 更新过程中, 会将subs下面所有 watcher 都执行 update, 这样计算属性watcher的 dirty 又回到了true
-    // TODO 渲染页面时, 会重新去拿计算属性的值，此时由于 dirty 为 true, 就会触发watcher.evalute() 这个方法，重新去执行getter方法拿到新的值, 并且将 dirty 重新置为true
+    // TODO 渲染页面时, 会重新去拿计算属性的值，此时由于 dirty 为 true, 就会触发watcher.evaluate() 这个方法，重新去执行getter方法拿到新的值, 并且将 dirty 重新置为true
     // TODO 实际上，还有一个最关键的一步操作，就是渲染watcher的触发，是在所有watcher的最后面，因为他的id最大，并且他在最后会通过nextTick去触发 flushSchedulerQueue() 去执行访问queue中所有watcher的run 再去触发get，而计算属性的get，也是在此处触发的。
     // TODO 因此，哪怕依赖的值并没有改变，只要页面的render-watcher触发过，就会重新get一次计算属性，当然，依赖值没有派发更新，那么计算属性的dirty就还是false，并不会触发他的更新，也就不会执行定义的getter函数了
     // TODO 同时触发依赖项的 getter 重新收集依赖又一次将 计算属性的watcher 添加到了自己的 dep.subs 中
