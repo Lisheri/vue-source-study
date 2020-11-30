@@ -219,7 +219,7 @@ Vue.js的核心思想——数据驱动
 + 在2.6的版本中计算属性的触发，依然是在所依赖的值(并且该值被订阅)发生改变时触发,巧妙的利用了订阅对象的派发更新的过程。
 + 首先计算属性初始化的时候会执行他的getter方法，他的getter方法就是我们所定义的计算属性函数，在这个函数中，要去拿data或者props中的变量，这样就会触发 data 或者 props 中订阅者的依赖收集(getter)，并且在这个时候，计算属性执行watcher.get()函数时，已经将Dep.target更新成了自己的watcher, 而在其所依赖的值(data 或者 props中的变量)的 依赖收集 过程中, 触发Dep.target.addDep(this) 这个方法 触发watcher下的 adddep(), 在执行dep.addSub(), 此时添加的sub就是Dep.target 也就是计算属性的watcher。
 + 主要是依赖项(data 或者 props 下的值) 执行dep.depend()时, 已经将他自己的getter执行完了，dep.target又恢复到了计算属性的watcher, 并且自己已经执行过一次cleanupDeps()
-+ 因此在依赖收集的过程中，已经将计算属性添加到了每一个依赖项的__ob__的subs中, 当依赖项进行派发更新时候，会遍历其下所有的sub，并且执行sub.update。只要存在计算属性的watcher, 就会将计算属性watcher实例的成员dirty更新为true(是根据watcher的lazy判断的，计算属性的lazy是true)。而之后的 updateComponent 这个渲染watcher (初始化Vue的时候就已经生成的watcher实例，所有的订阅者的subs中都有) 执行watcher.run()的时候, 就会触发传入getter 也就是 updateComponent 方法，这样就会执行vm._render生成新的VNode，然后执行_update 在其中执行patch方法渲染出真实的DOM更新整个页面，完成页面的更新
++ 因此在依赖收集的过程中，已经将计算属性添加到了每一个依赖项的__ob__的subs中, 当依赖项进行派发更新时候，会遍历其下所有的sub，并且执行sub.update。只要存在计算属性的watcher, 就会将计算属性watcher实例的成员dirty更新为true(是根据watcher的lazy判断的，计算属性的lazy是true)。而之后的 updateComponent 这个渲染watcher (初始化Vue的时候就已经生成的watcher实例，所有的订阅者的subs中都有) 执行watcher.run()的时候, 就会触发传入getter 也就是 updateComponent 方法，这样就会执行vm._render生成新的VNode，然后执行_update 在其中执行patch方法渲染出真实的DOM更新整个组件，完成组件的更新
 + 其中有一步很重要, 就是渲染watcher的触发，是在最后进行的，并且他的flushSchedulerQueue是最后通过 nextTick 进行一次异步触发(async = false 除外)，放在了所有watcher.update的最后面, 这样他执行的时候, 就会将这一次tick内的任务在下一次tick同步执行, 也就是下一步执行的时候，去触发的所有watcher.run()再去执行watcher.get()求值
 
 ### Watch(userWatcher)
@@ -228,3 +228,91 @@ Vue.js的核心思想——数据驱动
 + 这样当被侦听对象被赋值的时候, 触发派发更新的时候, 就会执行 userWatcher 的 update 方法, 这样一来, 无论是直接执行 run 还是 执行 queueWatcher, 最终都会执行 userWatcher.run() 去触发 this.cb.call(this.vm, value, oldValue), 然后触发我们定义的回调
 + 如果有deep属性, 那么会在执行get的时候额外的执行一个traverse() 这个方法没有什么特别的, 主要就是将侦听对象 每一层都跑一遍, 触发每一层的getter来收集 userWatcher 的依赖, 当其中任意一层改变后, 就会触发 dep.notify() 方法去跑 userWatcher 的 update, 触发 userWatcher 的回调
 + 如果侦听属性userWatcher 侦听了一个 计算属性, 那么在 userWatcher 初始化 的过程中, 首先触发userWatcher.get(), 会将 Dep.target 置为 userWatcher, 然后在其中执行 userWatcher.getter的时候会通过 this[key] (key代表计算属性的键名) 触发计算属性的getter, 而计算属性的 getter 中会执行其依赖对象的getter进行依赖收集, 在这里有一个很关键的一步, 首先Dep.target 会更新为 computedWatcher, 在执行 computedWatcher 的依赖对象的依赖收集的时候, 也就是dep(依赖对象的dep).depend(), 触发Dep.target.addDep(this(这个this代表computedWatcher的依赖对象)), 这样, 在computedWatcher的deps数组中就包含了其依赖对象的dep, 当computedWatcher执行depend()时,触发其下deps数组中所有dep的depend, 此时的Dep.target是userWatcher, 当执行Dep.target.addDep(计算属性依赖对象的dep)时, 就会在计算属性依赖对象的dep.subs中加入userWatcher的依赖. 自此, 当计算属性的依赖发生改变触发notify时, 不仅仅有computedWatcher.update和renderWatcher.update会执行,还会触发userWatcher.update()最终在触发userWatcher.run执行 userWatcher.cb触发我们设定的回调
+
+### 计算属性和侦听属性总结
+
++ 计算属性的本质是 computed watcher
++ 侦听属性的本质是 user watcher, 它还支持 depp、 sync、 immediate 等配置
++ 计算属性适合用在模板渲染中、 某个值是依赖了其他的响应式对象甚至是计算属性计算而来; 而侦听属性适用于观测某个值的变化去完成一段复杂的业务逻辑
+
+
+### 组件更新过程
+
+#### 组件更新的触发
+当父组件数据发生变化后, 执行变化数据的setter, 最后执行dep.notify()去派发更新, 到renderWatcher触发run的时候触发renderWatcher的getter也就是updateComponent方法, 去执行vm._update(), 在update中执行vm._render传入render得到的vnode, 然后在执行update方法时会触发patch, 在父组件patch的过程中会执行patchVnode, 而patchVnode会触发updateChildren, 在这其中会递归的去执行vnode下面children的patchVnode, 其中遇到组件Vnode就会触发prepatch方法, 然后在prepatch中会触发updateChildComponent去更新props下面的内容, 而props的更新, 会触发子组件内props的setter, 再一次派发更新, 去执行子组件的patch方法触发子组件更新
+
+#### 组件更新的patch
++ 新旧节点不同, patch接收四个参数, 分别是 oldVnode(旧节点), vnode(新节点), undefined, undefined
+    - 首先判断是否定义了新节点, 更新组件时已经有新节点了, 因此这个判断直接跳过
+    - 下一步是做一次初始化, 定义两个变量, 将 isInitialPatch 置为 false, 将insertedVnodeQueue 置为 false
+    - 组件更新定义了 oldVnode, 因此进入else过程
+    - 由于 oldVnode 和 vnode 都是虚拟节点, 因此他们的 nodetype 都是undefined, 所以标志变量 isRealElement 为 false
+    - 此处发生变化, 由于新旧节点不同, 因此将进入 else 中
+    - 由于 isRealElement 为 false, 因此直接跳过上面最大的判断
+    - 存储两个变量, 一个叫做oldElm, 获取 oldVnode 上面的 elm, 也就是旧节点对应的真实DOM, 同时使用 parentElm 存储 旧节点对应的父节点(非占位符类的组件节点, 是真实的父级DOM节点)
+    - 执行 createElement 函数, 使用 vnode 创建并插入新的真实DOM, 对 createElement 传入四个参数 依次为 vnode, [], parentElm, 当前组件节点的下一个节点, 若不存在, 则为空, 比如说组件为HelloWord, 他使用时是这样的 <div><hello-word :props="xxx"></hello-word><span>{{wocao}}</span></div>, 那么这最后一个参数就是这个 span 对应的dom节点
+    - 接下来将执行整个三步走的第二大步骤 —— 更新父的占位符节点
+    - 判断是否存在vnode.parent 也就是 组件的占位符节点, 实际上就是定义组件时使用的那个template所渲染出来的东西, 当然它对应的就是在父组件中展示出来的那个组件名
+    - 存在将进入判断中, 使用ancestor祖先 变量来存储 vnode.parent, 也就是组件vnode(组件的占位符节点)
+    - 判断vnode 是否是一个可挂载节点, 由于vnode不是组件vnode(占位符), 并不存在 componentInstance 并且存在tag, 因此是一个可挂载节点
+    - 注： 如果vnode是一个组件内部的根节点, 但是他同时又是一个组件节点 比如 a-card 这种, 那么他就会递归去找 componentInstance下面的_vnode去找这个下面他真正的渲染vnode
+    - 在DOM树往上递归, 直到不存在ancestor, 不停的去对 ancestor执行cbs中的destroy函数, 然后将vnode.elm(之前执行createElement时创建的真实DOM)赋值给ancestor.elm, 发现vnode是可挂载的vnode, 然后在循环执行c0bs中的create下面的方法, 创建新的占位符节点的相关东西, 然后在执行插入钩子, 这样就将占位符更新完成了
+    - 为什么要向上递归呢, 主要是为了找到最顶层的祖先,之前就说过, 可能存在根节点是a-card这种情况, 那么他的渲染vnod实际上是a-card中的根节点 而渲染vnode 的父亲就是 a-card 而不是真实的祖先节点, 这个时候就要往上递归一次, 当然, 除此之外, 都只有一次执行, 因为当下一次执行 ancestor = ancestor.parent 的时候就已经是undefined 然后跳出循环了
+    - 最后一个大的步骤, 就是删除旧的节点
+    - 如果parentElm存在, 就执行removeVnodes方法, 传入 [oldVnode], 0, 0三个参数, 就是将原来的oldVnode删去, 在下一步执行 insert钩子函数, 然后返回vnode.elm
+    - 结束
+
+#### updateChildren
++ 首先定义几个变量用于标志对比两个节点的开始结束位置, 比对的开始结束的节点。接收的第一个参数表示变化节点的父亲(他们的父亲是组件更新前后没有发生变化的, 也就是说当前elm代表的就是变化节点的直接父级)
++ 变量 canMove 为true, 因为removeOnly在组件更新时为undefined, 他来自于当前节点执行patchVnode的时候传入, 最主要是来源于patch的过程中传入的最后一个参数
++ 校验一次vnode上面的key值, 若存在重复的key, 则会抛出警告
++ 此处最主要的就是while循环的过程, 这个过程是dom diff的核心
++ while
+    - 只要旧的开始位置小于等于旧的结束位置并且新的开始位置小于等于新的结束位置就会不断进入循环
+    - 首先判断是否不存在 oldStartVnode, 如果不存在, 则将 oldStartVnode更新为 oldCh[++oldStartIdx], 也就是在oldCh数组中的下一个节点
+    - 如果存在 oldStartVnode, 但是不存在 oldEndVnode, 那么就将oldEndVnode置为所在 oldCh 中的前一个位置
+    - 如果存在 oldStartVnode 并且存在 oldEndVnode 并且oldStartVnode 和 newStartVnode 满足 sameVnode 方法的判断, 那么就会执行 patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)这个方法, 执行这个方法的时候就和之前一样了, 走到 ch 和 oldCh判断的位置会执行一次 updateChildren方法, 传入 当前oldVnode, ch 和 oldCh, 这就是递归的去执行这个updateChildren, 直到最底下最后只剩下一个text节点(ch 数组中只剩下一个儿子就是一个text节点这种), 相同的text节点, 在patchVnode过程中会很快过去, 然后出来会更新 oldStartIdx和 newStartIdx 以及 oldStartVnode 和 newStartVnode, 然后执行最下面的判断
+    - ##### oldEndVnode 和 newStartVnode 相同时
+        执行patchVnode将 oldEndVnode上的elm赋值给newStartVnode的elm(因为他们是相同节点)顺手递归去看他们的儿子是不是一样的, 或者说是不是只剩下一个text了, 如果不是, 对他们的儿子重复上面的过程, patchVnode执行完成之后, 将判断是否canMove, 如果是, 则将oldStartVnode.elm 插入到 oldEndVnode.elm的前面, 同时将oldEndVnode往前移动一位， 将newStartVnode往后移动一位,继续循环, 直到循环结束
+    - ##### oldStartVnode 和 newStartVnode 相同时
+        和上述过程一样, 执行一个patchVnode将 oldStartVnode上面的elm 赋值给 newStartVnode的elm, 顺手看他们的儿子是否相同, 是否已经到最后只剩下一个text, 如果是, 则判断text是否相等, 如果不等, 则将新的text赋值给旧的elm上面, patchVnode执行结束后, 直接将oldStartVnode 往后移动一位, 将 newStartVnode 往后移动一位
+    - ##### oldEndVnode 和 newEndVnode 相同时
+        和上述过程一样，执行一个patchVnode后, 将oldEndVnode上的elm赋值给newStartVnode的elm, 顺手查看儿子是否需要更新,是否已经到了最后的text节点, 将oldEndVnode往前移动一个，将newEndVnode往前移动一个
+    - ##### oldStartVnode 和 newEndVnode相同时
+        和上述过程一样, 执行一个patchVnode后, 将oldStartVnode 上的 elm 赋值给 newEndVnode的elm, 顺手查看他们的儿子。然后判断canMove, 满足则将oldEndVnode.elm插入到oldStartVnode的下一个兄弟节点的前面, 如果下一个为空, 则到最后
+    - 最后判断 oldStartInd > oldEndIdx 如果大于, 则判断是否存在newCh[newEndIdx + 1], 若不存在则将 refElm 置为null, 如果存在则置为该值的elm, 然后执行addVnodes将这个值插入父节点的儿子中(最后一级的文本节点不需要插入, 判断中的startIdx 已经大于 endIdx 了, 文本节点只需要直接继承旧节点的elm的dom属性, 上面有text表示他的文本内容), for循环执行addVnodes, 只要传入的startIdx 比 endIdx小, 就执行createElm创建新的节点, 在组件更新过程中创建的新节点都是在oldCh中没有的节点, 触发createChildren 创建文本节点, 如果存在data, 则执行invokeCreateHooks, 去执行create中的一系列update方法, 去更新 arrt class domListener props style 指令等。 最后执行插入语句, 如果有参考节点, 就插入到参考节点前, 如果没有就直接插入到最后。也就是说是更新过后新增出来的Vnode会直接插入到之前节点的最后。 判断如果 oldStartIdx <= oldEndIdx 并且 newStartIdx > newEndIdx 则移除旧节点中关于当前节点的信息
+#### createElement
++ 组件更新过程中触发
+    - 首先 vnode 还是一个虚拟节点, 并且并没有 patch 完成, 因此没有elm, 直接跳过第一个判断
+    - 由于组件更新时当前vnode本身就是一个根节点的渲染vnode, 并且并没有传入 nested 这个参数, 因此 vnode.isRootInsert 这个标志根节点插入的变量值为 true
+    - 进入判断之前首先会执行 createComponent 方法 传入参数依然是之前的四个, 没有返回值, 因此是一个undefined, 不会进入判断中
+    - 使用变量 data 存储 vnode.data, 使用变量 children 存储 vnode.children, 使用变量 tag 存储 vnode.tag
+    - 如果存在tag, 表示是一个渲染vnode, 则进入判断, 由于不存在 data.pre, 因此跳出判断中
+    - 这一步很重要, 如果存在vnode.ns也就是使用命名空间(namespace), 那么将执行createElementNS创建真实DOM, 如果没有, 那么就使用一般的createElement创建节点
+    - 只要标签不是select, 都直接返回 elm, 也就是生成的真实DOM节点
+    - 然后执行setScope, 插槽相关, 之后再看
+    - 下一步执行createChildren(vnode, children, []), 实际上就是递归的去遍历儿子节点, 然后对儿子节点执行 createElement，步骤是一样的, 是一个深层递归的过程
+    - 接下来判断是否存在data, 若存在则执行 invokeCreateHooks 方法, 实际上就是执行cbs下面create中的一系列update方法，去更新attr class domlistener props style 更新指令等
+    - 最后就是执行插入语句, insert函数, 传入参数 parentElm, vnode.elm, refElm(vnode的下一个兄弟节点对应的真实DOM), 插入语句就是在这个refElm的前面插入vnode.elm
+    - 因此这里就可以看出, 儿子的节点的插入语句在递归过程中会先于父亲节点执行, 这也就是之前说的插入过程是先子后父
+    - 结束
+
+#### createComponent
++ 组件更新过程中执行 createElement 的时候触发
+    - 使用变量 i 存储 vnode 上面的data(包含了class,title,style等标签上的属性)
+    - 如果 data 是空值, 那么就直接跳过, 但就算没有值也是一个空对象, 因此直接进入
+    - 如果 vnode 不是一个组件vnode(组件占位符vnode中包含 componentInstance) 或者 在vnode.data 中没有keepAlive 属性, 那么标志变量 isReactivated 为false
+    - 如果在vnode.data上存在hook 并且 hook 中存在 init 属性, 那么将执行 init(vnode, false) 方法, 但是在组组件更新过程中执行createComponent的时候 一般这里都是渲染vnode, 除非组件内部根节点还是一个组件, 也就是说他既是一个渲染vnode  也是一个 组件vnode, 比如说 a-card 这种
+    - 而没有 componentInstance 因此下一个判断依然不会进去, 因此此函数无返回值, 也就是说是一个undefined
+    
+### 组件更新总结
++ 组件更新的过程核心就是新旧 vnode diff, 对新旧节点相同以及不同的情况分别做不同的处理
++ 新旧节点不同的更新流程是创建新节点 -> 更新父占位符节点 -> 删除旧节点
++ 新旧节点相同的更新流程是去获取他们的children, 根据不同情况做不同的更新逻辑
+
+### 响应式原理总结
++ 核心就是去观测数据的变化, 当数据发生变化以后, 去通知对应的观察者来执行相关的逻辑。整个更新的实现, 都离不开 Dep, 他是连接数据和对应观察者的一个桥梁
++ 对于data和props, 他会通过 Observe 和 defineRactive 添加一系列的操作把整个data和props上定义的属性都变成响应式的, 同时内部会持有一个自己的dep的实例, 当我们访问这些数据的时候, 就会执行他们的getter方法, 去通过dep.depend这个方法去收集依赖, 收集的依赖就是当前正在计算的watcher, 也就是Dep.target, 作为subScribers(订阅者)来订阅这些数据的变化, 当修改这些数据的时候, 他就会触发setter方法, 去执行 dep.notify() 来通知订阅者做一个update这个逻辑
++ 对于computedWatcher，首先计算属性初始化的时候会执行他的getter方法，他的getter方法就是我们所定义的计算属性函数，在这个函数中，要去拿data或者props中的变量，这样就会触发 data 或者 props 中订阅者的依赖收集(getter)，并且在这个时候，计算属性执行watcher.get()函数时，已经将Dep.target更新成了自己的watcher, 而在其所依赖的值(data 或者 props中的变量)的 依赖收集 过程中, 触发Dep.target.addDep(this) 这个方法 触发watcher下的 adddep(), 在执行dep.addSub(), 此时添加的sub就是Dep.target 也就是计算属性的watcher。因此在依赖收集的过程中，已经将计算属性添加到了每一个依赖项的__ob__的subs中, 当依赖项进行派发更新时候，会遍历其下所有的sub，并且执行sub.update。只要存在计算属性的watcher, 就会将计算属性watcher实例的成员dirty更新为true(是根据watcher的lazy判断的，计算属性的lazy是true)。而之后的 updateComponent 这个渲染watcher (初始化Vue的时候就已经生成的watcher实例，所有的订阅者的subs中都有) 执行watcher.run()的时候, 就会触发传入getter 也就是 updateComponent 方法，这样就会执行vm._render生成新的VNode，然后执行_update 在其中执行patch方法渲染出真实的DOM更新整个组件，完成组件的更新
++ userWatcher初始化于 initWatch 这个函数中, 通过遍历所有侦听属性的 key, 拿到设置的侦听属性, 一般来说, 他是一个数组, 这个数组中有一个成员, 就是预先设置的侦听属性, 然后执行 createWatcher 这个方法, 这个方法通过前期不同的判断, 对handler做处理, 如果handler直接就是一个函数('test': (newVal, oldVal) => {xxx} 这种类型的侦听属性设置方式), 那么两个判断都不会进入, options 就是undefined, 然后通过 return vm.$watch()再一次柯里化, 将options.user设置为true, 表示即将创建的 watcher 实例是一个 userWatcher, 并且提供一个回调直接触发的判断 immediate, 如果说定义 userWatcher 的时候将 immediate属性设置为true, 那么初始化 userWatcher 时就可以直接触发一次, 并且 $watch 也是一次柯里化, 闭包返回的函数是用来销毁 userWatcher 的函数. 也就是说, 最终销毁 userWatcher 时, 只需要执行一次这个闭包返回的那个函数即可. new Watcher 创建 userWatcher 实例时, 会触发一次 this.get() , 将 Dep类的公有成员 target 设置为当前的 userWatcher , 并且在初始化过程中, 会执行 parsePath 得到 this.getter, this.getter 就是一个返回值为 vm[key] 的函数, key 代表 userWatcher 定义时的键名, 在 get() 中执行 this.getter.call(this.vm, this.vm), 实际上就是将当前 vue 的实例传入 getter 中, 这样访问的就是被侦听对象的 getter, 然后触发 被侦听对象的依赖收集, 执行 dep.depend(), 收集 userWatcher 这样当被侦听对象被赋值的时候, 触发派发更新的时候, 就会执行 userWatcher 的 update 方法, 这样一来, 无论是直接执行 run 还是 执行 queueWatcher, 最终都会执行 userWatcher.run() 去触发 this.cb.call(this.vm, value, oldValue), 然后触发我们定义的回调 如果有deep属性, 那么会在执行get的时候额外的执行一个traverse() 这个方法没有什么特别的, 主要就是将侦听对象 每一层都跑一遍, 触发每一层的getter来收集 userWatcher 的依赖, 当其中任意一层改变后, 就会触发 dep.notify() 方法去跑 userWatcher 的 update, 触发 userWatcher 的回调 如果侦听属性userWatcher 侦听了一个 计算属性, 那么在 userWatcher 初始化 的过程中, 首先触发userWatcher.get(), 会将 Dep.target 置为 userWatcher, 然后在其中执行 userWatcher.getter的时候会通过 this[key] (key代表计算属性的键名) 触发计算属性的getter, 而计算属性的 getter 中会执行其依赖对象的getter进行依赖收集, 在这里有一个很关键的一步, 首先Dep.target 会更新为 computedWatcher, 在执行 computedWatcher 的依赖对象的依赖收集的时候, 也就是dep(依赖对象的dep).depend(), 触发Dep.target.addDep(this(这个this代表computedWatcher的依赖对象)), 这样, 在computedWatcher的deps数组中就包含了其依赖对象的dep, 当computedWatcher执行depend()时,触发其下deps数组中所有dep的depend, 此时的Dep.target是userWatcher, 当执行Dep.target.addDep(计算属性依赖对象的dep)时, 就会在计算属性依赖对象的dep.subs中加入userWatcher的依赖. 自此, 当计算属性的依赖发生改变触发notify时, 不仅仅有computedWatcher.update和renderWatcher.update会执行,还会触发userWatcher.update()最终在触发userWatcher.run执行 userWatcher.cb触发我们设定的回调
++ 当数据发生变化的时，最终都是在最后统一在一次tick完成后调用renderWatcher.run去执行update方法然后执行patch来更新整个组件

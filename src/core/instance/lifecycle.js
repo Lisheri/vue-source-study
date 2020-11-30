@@ -289,6 +289,8 @@ export function updateChildComponent (
   parentVnode: MountedComponentVNode,
   renderChildren: ?Array<VNode>
 ) {
+  // * updateChildComponent方法主要就是对props、 listeners、 parentVnode 和 renderChildren 的更新
+  // * 该方法主要对子组件传入的 props、 事件 等做更新
   if (process.env.NODE_ENV !== 'production') {
     isUpdatingChildComponent = true
   }
@@ -301,6 +303,13 @@ export function updateChildComponent (
   // "$stable" marker.
   const newScopedSlots = parentVnode.data.scopedSlots
   const oldScopedSlots = vm.$scopedSlots
+  
+  /* 
+    * $key： 表示插槽内容是否在更新时复用
+    * $stable： 插槽的渲染函数是否需要每次重新计算
+    * name: fn:  表示对应作用域插槽的渲染函数
+  */
+ 
   const hasDynamicScopedSlot = !!(
     (newScopedSlots && !newScopedSlots.$stable) ||
     (oldScopedSlots !== emptyObject && !oldScopedSlots.$stable) ||
