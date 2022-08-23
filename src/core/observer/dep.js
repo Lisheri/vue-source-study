@@ -13,6 +13,7 @@ let uid = 0
 export default class Dep {
   // * dep类主要的目的就是建立数据和watcher之间的桥梁
   static target: ?Watcher;
+  // id属性主要用于计数, 每个dep对象都有, 所有dep对象公用同一个基础值, 每创建完一个dep对象, 都会让这个id自增, 初始值为0
   id: number;
   subs: Array<Watcher>; // * subs是一个订阅数据变化的watcher集合
 
@@ -38,18 +39,19 @@ export default class Dep {
 
   notify () {
     // stabilize the subscriber list first
-    // * 这是一层简单的深拷贝
+    // 首先获取当前dep下的所有Watcher实例(使用slice浅拷贝第一层)
     const subs = this.subs.slice()
     if (process.env.NODE_ENV !== 'production' && !config.async) {
       // subs aren't sorted in scheduler if not running async
       // we need to sort them now to make sure they fire in correct
       // order
-      // * 如果config.async为false, 就为订阅者排序
+      // * 如果config.async为false, 就为watcher排序
       subs.sort((a, b) => a.id - b.id)
     }
-    // * 遍历所有的订阅者，为他们进行更新
+    // * 遍历所有的订阅者，触发其update方法实现更新
     for (let i = 0, l = subs.length; i < l; i++) {
       // * subs中的数据都是watcher的实例, 所以subs[i].update()就是Watcher类中的update
+      // 调用update方法进行更新
       subs[i].update()
     }
   }
@@ -58,6 +60,7 @@ export default class Dep {
 // The current target watcher being evaluated.
 // This is globally unique because only one watcher
 // can be evaluated at a time.
+// Dep.target 是用于存储当前正在执行的目标 watcher 对象, 并且他是全局唯一的, 同一时间, 只有一个Watcher正在被使用
 Dep.target = null
 // * watcher栈
 const targetStack = []

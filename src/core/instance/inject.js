@@ -37,6 +37,7 @@ export function initInjections (vm: Component) {
 }
 
 export function resolveInject (inject: any, vm: Component): ?Object {
+  // * 配置中inject不存在直接跳过
   if (inject) {
     // inject is :any because flow is not smart enough to figure out cached
     const result = Object.create(null)
@@ -50,6 +51,7 @@ export function resolveInject (inject: any, vm: Component): ?Object {
       if (key === '__ob__') continue
       const provideKey = inject[key].from
       let source = vm
+      // * 寻找所有父级的provide
       while (source) {
         if (source._provided && hasOwn(source._provided, provideKey)) {
           result[key] = source._provided[provideKey]

@@ -31,6 +31,7 @@ export function initRender (vm: Component) {
   // internal version is used by render functions compiled from templates
   // * 以下两个方法，只有最后一个参数不一样，这个_c是给编译生成的render函数所使用的方法
   // * 但是这两个方法最终都会调用createElement()这个函数
+  // * _c对编译生成的render函数进行转换(模板编译的render专用h)
   vm._c = (a, b, c, d) => createElement(vm, a, b, c, d, false)
   // normalization is always applied for the public version, used in
   // user-written render functions.
@@ -65,6 +66,7 @@ export function setCurrentRenderingInstance (vm: Component) {
 
 export function renderMixin (Vue: Class<Component>) {
   // install runtime convenience helpers
+  // * 安装渲染相关的帮助方法
   installRenderHelpers(Vue.prototype)
 
   Vue.prototype.$nextTick = function (fn: Function) {
@@ -73,8 +75,7 @@ export function renderMixin (Vue: Class<Component>) {
   // * _render方法的定义，返回的是一个VNode
   Vue.prototype._render = function (): VNode {
     const vm: Component = this // * 依然是使用vm代替this
-    // * 从$options中取出render和_parentVnode
-    // * 在这里就会得到一个父级占位符_parentVnode
+    // 这个render是用户定义或模板编译出来的
     const { render, _parentVnode } = vm.$options
     // * 如果存在父节点
     // ! 插槽相关，先不慌

@@ -71,7 +71,8 @@ export function initState (vm: Component) {
 }
 
 function initProps (vm: Component, propsOptions: Object) {
-  const propsData = vm.$options.propsData || {} // * 首先拿到props的定义
+  const propsData = vm.$options.propsData || {}
+   // * 首先拿到options.props的定义, 并添加到props常量中
   const props = vm._props = {}
   // cache prop keys so that future props updates can iterate using Array
   // instead of dynamic object key enumeration.
@@ -81,6 +82,7 @@ function initProps (vm: Component, propsOptions: Object) {
   if (!isRoot) {
     toggleObserving(false)
   }
+  // * 遍历props的key,并通过 defineReactive 添加get和set, 然后注入到props对象中, 同时添加开发环境赋值警告
   for (const key in propsOptions) {
     keys.push(key)
     const value = validateProp(key, propsOptions, propsData, vm)
@@ -111,6 +113,7 @@ function initProps (vm: Component, propsOptions: Object) {
     // static props are already proxied on the component's prototype
     // during Vue.extend(). We only need to proxy props defined at
     // instantiation here.
+    // * 如果在vue实例上不存在props下的属性, 则通过proxy添加到实例中
     if (!(key in vm)) {
       proxy(vm, `_props`, key)
     }
@@ -240,7 +243,9 @@ export function defineComputed (
   key: string,
   userDef: Object | Function
 ) {
-  const shouldCache = !isServerRendering() // * 如果不是服务端渲染, 那么就需要缓存, 将 shouldCache 置为 true
+  // 设置是否需要缓存, 主要根据是否服务端渲染来判断, 非服务端渲染需要缓存
+  // 大部分情况下为true
+  const shouldCache = !isServerRendering()
   if (typeof userDef === 'function') {
     // * 在计算属性下面直接定义的就是一个函数的情况
     sharedPropertyDefinition.get = shouldCache
@@ -295,9 +300,12 @@ function createGetterInvoker(fn) {
 }
 
 function initMethods (vm: Component, methods: Object) {
+  // 获取props
   const props = vm.$options.props
+  // 遍历methods中属性
   for (const key in methods) {
     if (process.env.NODE_ENV !== 'production') {
+      // 非函数成员告警
       if (typeof methods[key] !== 'function') {
         warn(
           `Method "${key}" has type "${typeof methods[key]}" in the component definition. ` +
@@ -305,12 +313,14 @@ function initMethods (vm: Component, methods: Object) {
           vm
         )
       }
+      // 是否和props中的键重复, 重复则告警
       if (props && hasOwn(props, key)) {
         warn(
           `Method "${key}" has already been defined as a prop.`,
           vm
         )
       }
+      // isReserved 判断key是否以 _ 或 $ 开头, 顺便告警, 同时实例上存在也告警
       if ((key in vm) && isReserved(key)) {
         warn(
           `Method "${key}" conflicts with an existing Vue instance method. ` +
@@ -318,6 +328,7 @@ function initMethods (vm: Component, methods: Object) {
         )
       }
     }
+    // 将methods注入到vue实例中, 非function返回空函数, 同时将函数内部this重定向到vue实例上
     vm[key] = typeof methods[key] !== 'function' ? noop : bind(methods[key], vm)
   }
 }
@@ -375,31 +386,43 @@ export function stateMixin (Vue: Class<Component>) {
       warn(`$props is readonly.`, this)
     }
   }
+  // * 往原型上挂载属性$data和$props, 通过get属性指向_data和_props
   Object.defineProperty(Vue.prototype, '$data', dataDef)
   Object.defineProperty(Vue.prototype, '$props', propsDef)
 
+  // * 就是Vue.set和Vue.delete
   Vue.prototype.$set = set
   Vue.prototype.$delete = del
 
   Vue.prototype.$watch = function (
-    expOrFn: string | Function,
-    cb: any,
-    options?: Object
+    expOrFn: string | Function, // watch的键名
+    cb: any, // watch的回调函数
+    options?: Object // watch侦听对象的属性值, 包含handler, deep, immediate等
   ): Function {
+    // 获取Vue实例, 之所以没有静态方法, 就是因为这里需要使用到Vue的实例
     const vm: Component = this
+
+    // 判断传入的 cb, 是不是一个原始对象
     if (isPlainObject(cb)) {
+      // 因为$watch可以直接调用, 这里可以直接传递一个函数, 也可以直接传递一个对象, 如果传递的是一个对象, 那么就在这里对对象进行重新解析
       return createWatcher(vm, expOrFn, cb, options)
     }
+    // 表示options解析过
     options = options || {}
+    // 标记当前watcher是 userWatcher
     options.user = true
+    // 创建 userWatcher 对象, 将处理好的 options 作为参数传入
     const watcher = new Watcher(vm, expOrFn, cb, options)
+    // 判断是否需要立即执行
     if (options.immediate) {
       try {
+        // 立即执行侦听器回调
         cb.call(vm, watcher.value)
       } catch (error) {
         handleError(error, vm, `callback for immediate watcher "${watcher.expression}"`)
       }
     }
+    // 返回一个取消监听的方法
     return function unwatchFn () {
       watcher.teardown()
     }

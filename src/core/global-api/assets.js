@@ -8,6 +8,7 @@ export function initAssetRegisters (Vue: GlobalAPI) {
   /**
    * Create asset registration methods.
    */
+  // 依然是遍历数组ASSET_TYPES, 这下面就包含了component、directive和filter
   ASSET_TYPES.forEach(type => {
     // * 首先将component filter和directive挂载到Vue上
     // * 在这里Vue扩展了三个全局函数， component filter 和 directive

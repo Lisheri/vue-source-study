@@ -20,6 +20,7 @@ const idToTemplate = cached(id => {
 const mount = Vue.prototype.$mount
 // * 为什么要重新定义一遍，主要是因为上面的mount是给runtime-only版本直接用的，下面这一块的逻辑在runtime-only中是没有的
 // * el参数可以是一个字符串也可以是一个Element节点
+// 挂载, 将生成的内容挂载到页面上
 Vue.prototype.$mount = function (
   el?: string | Element,
   hydrating?: boolean
@@ -68,8 +69,7 @@ Vue.prototype.$mount = function (
         return this
       }
     } else if (el) {
-      // * 如果没有template有el，则获取el所在的dom节点，如果el所在的dom节点不存在，则创建一个空的div,拿到div的InnerHTML
-      // ! outerHTML是一个字符串,此处的template是一个字符串
+      // 如果没有template, 获取el的outerHTML作为模板
       template = getOuterHTML(el)
     }
     if (template) {

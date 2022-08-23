@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>set</title>
+</head>
+
+<body>
+  <div id="app">
+  </div>
+  <script src="../../dist/vue.runtime.js"></script>
+  <script>
+    const vm = new Vue({
+      el: "#app",
+      data: {
+        msg: 'hello vue'
+      },
+      render(h) {
+        // h(tag, data, children)
+        // h(h1, this.msg); // 根据参数判断渲染
+        // h(h1, { domProps: { innerHTML: this.msg } }) 设置节点属性
+        // h(h1, { attrs: { id: 'title' } }, this.msg)
+        const vnode = h(
+          'h1',
+          {
+            attrs: {
+              id: 'title'
+            }
+          },
+          [
+            [10,
+              h('h2',
+                '1'
+              ),
+              h('h2',
+                '2'
+              ),
+              3, 4, 5],
+            [10,
+              h('h2',
+                '1'
+              ),
+              h('h2',
+                '2'
+              ),
+              3, 4, 5],
+            10,
+            h('h2',
+              '1'
+            ),
+            h('h2',
+              '2'
+            ),
+            3, 4, 5
+          ]
+        );
+        console.info(vnode);
+        return vnode;
+      },
+    });
+
+    // vm.$watch('user', function (newVal, oldVal) {
+    //   console.info(newVal);
+    //   this.user.fullName = newVal.firstName + ' ' + newVal.lastName;
+    // }, {
+    //   immediate: true,
+    //   deep: true
+    // })
+  </script>
+</body>
+
+</html>

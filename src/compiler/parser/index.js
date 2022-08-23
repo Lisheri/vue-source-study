@@ -80,6 +80,7 @@ export function parse (
   template: string,
   options: CompilerOptions
 ): ASTElement | void {
+  // 1. 解析options中的成员
   warn = options.warn || baseWarn
 
   platformIsPreTag = options.isPreTag || no
@@ -93,7 +94,7 @@ export function parse (
   postTransforms = pluckModuleFunction(options.modules, 'postTransformNode')
 
   delimiters = options.delimiters
-
+  // 定义了一些变量和函数
   const stack = []
   const preserveWhitespace = options.preserveWhitespace !== false
   const whitespaceOption = options.whitespace
@@ -201,6 +202,7 @@ export function parse (
     }
   }
 
+  // 2 调用parseHTML对模板进行解析(核心)
   parseHTML(template, {
     warn,
     expectHTML: options.expectHTML,
@@ -210,6 +212,7 @@ export function parse (
     shouldDecodeNewlinesForHref: options.shouldDecodeNewlinesForHref,
     shouldKeepComment: options.comments,
     outputSourceRange: options.outputSourceRange,
+    // 解析过程中的回调函数, 生成AST
     start (tag, attrs, unary, start, end) {
       // check namespace.
       // inherit parent ns if there is one
@@ -396,6 +399,7 @@ export function parse (
       }
     }
   })
+  // 3 最后返回了一个root变量, 这个root里面存储的就是解析好的ast对象
   return root
 }
 

@@ -60,7 +60,8 @@ function isPlainObject (obj) {
  * Check if val is a valid array index.
  */
 function isValidArrayIndex (val) {
-  var n = parseFloat(String(val));
+  var n = parseFloat(String(val)); // ? 如果不是数字或者不是字符串数字，都会返回NaN通不过第一个判断
+  // * isFinite用于判断目标是不是一个有限值
   return n >= 0 && Math.floor(n) === n && isFinite(val)
 }
 
@@ -107,7 +108,7 @@ function remove (arr, item) {
 /**
  * Check whether an object has the property.
  */
-var hasOwnProperty = Object.prototype.hasOwnProperty;
+var hasOwnProperty = Object.prototype.hasOwnProperty; // * 返回一个boolean值表明自身属性中是否会有目标键
 function hasOwn (obj, key) {
   return hasOwnProperty.call(obj, key)
 }
@@ -116,7 +117,7 @@ function hasOwn (obj, key) {
  * Create a cached version of a pure function.
  */
 function cached (fn) {
-  var cache = Object.create(null);
+  var cache = Object.create(null); // * 创建一个空数组
   return (function cachedFn (str) {
     var hit = cache[str];
     return hit || (cache[str] = fn(str))
@@ -138,37 +139,6 @@ var hyphenateRE = /\B([A-Z])/g;
 var hyphenate = cached(function (str) {
   return str.replace(hyphenateRE, '-$1').toLowerCase()
 });
-
-/**
- * Simple bind polyfill for environments that do not support it,
- * e.g., PhantomJS 1.x. Technically, we don't need this anymore
- * since native bind is now performant enough in most browsers.
- * But removing it would mean breaking code that was able to run in
- * PhantomJS 1.x, so this must be kept for backward compatibility.
- */
-
-/* istanbul ignore next */
-function polyfillBind (fn, ctx) {
-  function boundFn (a) {
-    var l = arguments.length;
-    return l
-      ? l > 1
-        ? fn.apply(ctx, arguments)
-        : fn.call(ctx, a)
-      : fn.call(ctx)
-  }
-
-  boundFn._length = fn.length;
-  return boundFn
-}
-
-function nativeBind (fn, ctx) {
-  return fn.bind(ctx)
-}
-
-var bind = Function.prototype.bind
-  ? nativeBind
-  : polyfillBind;
 
 /**
  * Mix properties into target object.
@@ -260,7 +230,7 @@ function def (obj, key, val, enumerable) {
 
 // Regular Expressions for parsing tags and attributes
 var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
-var dynamicArgAttribute = /^\s*((?:v-[\w-]+:|@|:|#)\[[^=]+\][^\s"'<>\/=]*)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
+var dynamicArgAttribute = /^\s*((?:v-[\w-]+:|@|:|#)\[[^=]+?\][^\s"'<>\/=]*)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
 var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z" + (unicodeRegExp.source) + "]*";
 var qnameCapture = "((?:" + ncname + "\\:)?" + ncname + ")";
 var startTagOpen = new RegExp(("^<" + qnameCapture));
@@ -299,8 +269,8 @@ function decodeAttr (value, shouldDecodeNewlines) {
 function parseHTML (html, options) {
   var stack = [];
   var expectHTML = options.expectHTML;
-  var isUnaryTag$$1 = options.isUnaryTag || no;
-  var canBeLeftOpenTag$$1 = options.canBeLeftOpenTag || no;
+  var isUnaryTag = options.isUnaryTag || no;
+  var canBeLeftOpenTag = options.canBeLeftOpenTag || no;
   var index = 0;
   var last, lastTag;
   while (html) {
@@ -462,12 +432,12 @@ function parseHTML (html, options) {
       if (lastTag === 'p' && isNonPhrasingTag(tagName)) {
         parseEndTag(lastTag);
       }
-      if (canBeLeftOpenTag$$1(tagName) && lastTag === tagName) {
+      if (canBeLeftOpenTag(tagName) && lastTag === tagName) {
         parseEndTag(tagName);
       }
     }
 
-    var unary = isUnaryTag$$1(tagName) || !!unarySlash;
+    var unary = isUnaryTag(tagName) || !!unarySlash;
 
     var l = match.attrs.length;
     var attrs = new Array(l);
@@ -692,6 +662,7 @@ function parseComponent (
 var hasProto = '__proto__' in {};
 
 // Browser environment sniffing
+// * inBrowser判断是否是在浏览器中
 var inBrowser = typeof window !== 'undefined';
 var inWeex = typeof WXEnvironment !== 'undefined' && !!WXEnvironment.platform;
 var weexPlatform = inWeex && WXEnvironment.platform.toLowerCase();
@@ -707,11 +678,15 @@ var isFF = UA && UA.match(/firefox\/(\d+)/);
 
 // Firefox has a "watch" function on Object.prototype...
 var nativeWatch = ({}).watch;
+
+var supportsPassive = false;
 if (inBrowser) {
   try {
     var opts = {};
     Object.defineProperty(opts, 'passive', ({
       get: function get () {
+        /* istanbul ignore next */
+        supportsPassive = true;
       }
     })); // https://github.com/facebook/flow/issues/285
     window.addEventListener('test-passive', null, opts);
@@ -735,10 +710,8 @@ var isServerRendering = function () {
   return _isServer
 };
 
-// detect devtools
-var devtools = inBrowser && window.__VUE_DEVTOOLS_GLOBAL_HOOK__;
-
 /* istanbul ignore next */
+// * 用于检测浏览器是否支持一些原生方法如Proxy
 function isNative (Ctor) {
   return typeof Ctor === 'function' && /native code/.test(Ctor.toString())
 }
@@ -746,31 +719,8 @@ function isNative (Ctor) {
 var hasSymbol =
   typeof Symbol !== 'undefined' && isNative(Symbol) &&
   typeof Reflect !== 'undefined' && isNative(Reflect.ownKeys);
-
-var _Set;
 /* istanbul ignore if */ // $flow-disable-line
-if (typeof Set !== 'undefined' && isNative(Set)) {
-  // use native Set when available.
-  _Set = Set;
-} else {
-  // a non-standard Set polyfill that only works with primitive keys.
-  _Set = /*@__PURE__*/(function () {
-    function Set () {
-      this.set = Object.create(null);
-    }
-    Set.prototype.has = function has (key) {
-      return this.set[key] === true
-    };
-    Set.prototype.add = function add (key) {
-      this.set[key] = true;
-    };
-    Set.prototype.clear = function clear () {
-      this.set = Object.create(null);
-    };
-
-    return Set;
-  }());
-}
+if (typeof Set !== 'undefined' && isNative(Set)) ;
 
 var ASSET_TYPES = [
   'component',
@@ -908,7 +858,9 @@ if (process.env.NODE_ENV !== 'production') {
   warn = function (msg, vm) {
     var trace = vm ? generateComponentTrace(vm) : '';
 
-    if (hasConsole && (!config.silent)) {
+    if (config.warnHandler) {
+      config.warnHandler.call(null, msg, vm, trace);
+    } else if (hasConsole && (!config.silent)) {
       console.error(("[Vue warn]: " + msg + trace));
     }
   };
@@ -1006,20 +958,25 @@ Dep.prototype.removeSub = function removeSub (sub) {
 
 Dep.prototype.depend = function depend () {
   if (Dep.target) {
+    // * 如果存在target, 这个target就是watcher, 那么就会使用watcher.addDep(this)
     Dep.target.addDep(this);
   }
 };
 
 Dep.prototype.notify = function notify () {
   // stabilize the subscriber list first
+  // * 这是一层简单的深拷贝
   var subs = this.subs.slice();
   if (process.env.NODE_ENV !== 'production' && !config.async) {
     // subs aren't sorted in scheduler if not running async
     // we need to sort them now to make sure they fire in correct
     // order
+    // * 如果config.async为false, 就为订阅者排序
     subs.sort(function (a, b) { return a.id - b.id; });
   }
+  // * 遍历所有的订阅者，为他们进行更新
   for (var i = 0, l = subs.length; i < l; i++) {
+    // * subs中的数据都是watcher的实例, 所以subs[i].update()就是Watcher类中的update
     subs[i].update();
   }
 };
@@ -1031,6 +988,9 @@ Dep.target = null;
 
 /*  */
 
+// * 此处为Vue的Virtual DOM定义的位置
+// * 这个VNode实际上是棵树
+// * 看起来他很多，但实际上比真实的dom，代价要小很多
 var VNode = function VNode (
   tag,
   data,
@@ -1047,20 +1007,20 @@ var VNode = function VNode (
   this.text = text;
   this.elm = elm;
   this.ns = undefined;
-  this.context = context;
-  this.fnContext = undefined;
+  this.context = context; // * 所谓上下文就是当前vue实例, 如果是组件就是组件实例
+  this.fnContext = undefined; // * 函数式组件的作用域
   this.fnOptions = undefined;
   this.fnScopeId = undefined;
-  this.key = data && data.key;
-  this.componentOptions = componentOptions;
-  this.componentInstance = undefined;
-  this.parent = undefined;
-  this.raw = false;
-  this.isStatic = false;
-  this.isRootInsert = true;
-  this.isComment = false;
-  this.isCloned = false;
-  this.isOnce = false;
+  this.key = data && data.key; // * 节点的key属性，被当做节点的标志，用以优化
+  this.componentOptions = componentOptions; // * 组件的options选项
+  this.componentInstance = undefined; // * 当前节点对应的组件的实例
+  this.parent = undefined; // * 当前节点的父节点
+  this.raw = false; // * 是否为原生HTML或只是普通文本，innerHTML的时候为true， textCOntent的时候为false
+  this.isStatic = false; // * 是否为静态节点
+  this.isRootInsert = true; // * 是否作为根节点插入
+  this.isComment = false; // * 是否是一个注释节点, 这个意思是就是说两边带了<-- -->这种
+  this.isCloned = false; // * 是否是一个克隆节点
+  this.isOnce = false; // * 是否存在v-once指令
   this.asyncFactory = asyncFactory;
   this.asyncMeta = undefined;
   this.isAsyncPlaceholder = false;
@@ -1082,6 +1042,7 @@ Object.defineProperties( VNode.prototype, prototypeAccessors );
  */
 
 var arrayProto = Array.prototype;
+// * Object.create(obj)是使用现有对象来提供新创建对象的__proto__, 也就是说arrayMethods.__proto__ = arrayProto
 var arrayMethods = Object.create(arrayProto);
 
 var methodsToPatch = [
@@ -1100,24 +1061,29 @@ var methodsToPatch = [
 methodsToPatch.forEach(function (method) {
   // cache original method
   var original = arrayProto[method];
+  // * 这个 original 代表的是数组原型上原来的 push、 pop 等方法
+  // * 改写原型上的方法，把它添加到 arrayMethods 上
   def(arrayMethods, method, function mutator () {
     var args = [], len = arguments.length;
     while ( len-- ) args[ len ] = arguments[ len ];
 
-    var result = original.apply(this, args);
-    var ob = this.__ob__;
-    var inserted;
+    var result = original.apply(this, args); // * 首先拿到原始方法去调用一次, 拿到一个结果
+    var ob = this.__ob__; // * 拿到数组对应的 __ob__(所有执行过Observer构造函数的都有__ob__)
+    var inserted; // * 定义了一个临时变量
     switch (method) {
       case 'push':
       case 'unshift':
+        // * 如果是 push 或者 unshift 就是往数组最后或者最前面插入值的方法, 就把 inserted 的值置为 数组方法参数值
         inserted = args;
         break
       case 'splice':
+        // * 如果是 splice 那么这个inserted 就是 参数数组的第三个值, 也就是插入或者改变的值
         inserted = args.slice(2);
         break
     }
-    if (inserted) { ob.observeArray(inserted); }
+    if (inserted) { ob.observeArray(inserted); } // * 对参数数组中的每一项添加一次响应式(当然, 这一项首先得是 Object)
     // notify change
+    // * 通知订阅者更新
     ob.dep.notify();
     return result
   });
@@ -1126,12 +1092,6 @@ methodsToPatch.forEach(function (method) {
 /*  */
 
 var arrayKeys = Object.getOwnPropertyNames(arrayMethods);
-
-/**
- * In some cases we may want to disable observation inside a component's
- * update computation.
- */
-var shouldObserve = true;
 
 /**
  * Observer class that is attached to each observed
@@ -1143,13 +1103,20 @@ var Observer = function Observer (value) {
   this.value = value;
   this.dep = new Dep();
   this.vmCount = 0;
+  // * def方法为value对象下的'__ob__'使用Object.defineproperty(value, '__ob__', {value: val(这个val就是this), enumerable: !!enumerable(此处没有传递，因此最后为false), writable: true, configurable: true})
+  // * 总的来说就是增加value.__ob__, 并且属性值指向当前实例 然后添加了一些属性, 默认为不可枚举
+  // * 主要是为了方便相同组件的data或者props有一次进入initState中，然后进入observe方法，对已经监听过的对象，就不用再来重新设置监听了，直接使用value.__ob__就可以了
+  // ? 至于为什么要使用Object.defineProperty而不是直接使用value.__ob__ = this, 后面再看
   def(value, '__ob__', this);
   if (Array.isArray(value)) {
+    // * value是一个数组
     if (hasProto) {
+      // * 浏览器上有原型，因此非服务端渲染, 就会 使用这个 protoAugment
       protoAugment(value, arrayMethods);
     } else {
       copyAugment(value, arrayMethods, arrayKeys);
     }
+    // * 这个方法主要是当value是一个数组的时候，将value下面的每一个成员递归观察起来,也就是执行observe(value[i])
     this.observeArray(value);
   } else {
     this.walk(value);
@@ -1164,7 +1131,9 @@ var Observer = function Observer (value) {
 Observer.prototype.walk = function walk (obj) {
   var keys = Object.keys(obj);
   for (var i = 0; i < keys.length; i++) {
-    defineReactive$$1(obj, keys[i]);
+    // * 到这里，就解决了上面的问题，为什么要用Object.defineProperty来添加value.__ob__而不是直接使用value.__ob__ = this
+    // * 如果直接将this赋值，那么value.__ob__也会执行defineReactive这个方法
+    defineReactive(obj, keys[i]);
   }
 };
 
@@ -1173,6 +1142,7 @@ Observer.prototype.walk = function walk (obj) {
  */
 Observer.prototype.observeArray = function observeArray (items) {
   for (var i = 0, l = items.length; i < l; i++) {
+    // * 也就是说数组添加响应式，只针对数组下面是一个对象的条目，如果数组的成员是值类型就不会添加响应式
     observe(items[i]);
   }
 };
@@ -1185,6 +1155,8 @@ Observer.prototype.observeArray = function observeArray (items) {
  */
 function protoAugment (target, src) {
   /* eslint-disable no-proto */
+  // ! 这里虽然将所有数组的__proto__都修改为了 src, 这个src是只有'push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse' 这7个方法的对象
+  // ! 但是 src也就是 arrayMethods 创建的时候, 这个对象的__proto__就已经指向了Array.prototype, 因此, 尽管响应式数组的第一层方法已经改变，但其他所有的方法，都还在第二层__proto__上面
   target.__proto__ = src;
   /* eslint-enable no-proto */
 }
@@ -1206,20 +1178,26 @@ function copyAugment (target, src, keys) {
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
  */
+// * observe接受两个参数，第一个是value，也就是需要添加监听的对象, 任意类型都可以，第二个是一个布尔值，表明是不是根数据
 function observe (value, asRootData) {
   if (!isObject(value) || value instanceof VNode) {
+    // * 在这里先判断需要添加的数据是否不是一个Object或者说是一个VNode，满足一个就直接返回
+    // * 所以说对于要观测的value，至少要是一个对象类型，并且不能是VNode
     return
   }
   var ob;
   if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
     ob = value.__ob__;
   } else if (
-    shouldObserve &&
+    
     !isServerRendering() &&
     (Array.isArray(value) || isPlainObject(value)) &&
     Object.isExtensible(value) &&
     !value._isVue
   ) {
+    // * shouldObserve用于控制对象是否需要添加监听, isServerRendering表示是否为服务端渲染, 并且监听对象必须要是一个数组或者一个对象(toString()后为[object object]这种)
+    // * 最后还要判断他不是一个Vue实例，Vue实例的isVue为true
+    // ! Observer实际上被定义为一个Class, 执行new Observer的时候就会执行下面的构造函数
     ob = new Observer(value);
   }
   if (asRootData && ob) {
@@ -1231,7 +1209,7 @@ function observe (value, asRootData) {
 /**
  * Define a reactive property on an Object.
  */
-function defineReactive$$1 (
+function defineReactive (
   obj,
   key,
   val,
@@ -1240,27 +1218,60 @@ function defineReactive$$1 (
 ) {
   var dep = new Dep();
 
+  // * Object.getOwnPropertyDescriptor该方法返回的是指定对象属性上的描述符
   var property = Object.getOwnPropertyDescriptor(obj, key);
   if (property && property.configurable === false) {
+    // * 如果该属性存在，但是configurable为false, 那么就直接返回，因为property.configurable为false表示该属性不可修改
+    // * 这种一般是主动设置，或者使用Object.freeze方法，冻结对象， 也可以使用Object.seal()将目标对象改为不可扩展, configurable设置为false
+    // * 也就是凡是存在一个属性是不可配置的, 就不会添加监听了, 会直接返回
+
+    // ! Object.freeze冻结整个对象，整个对象不能添加也不能删除并且不能修改原有的属性, 
+    // ! 而Object.seal() 是封闭原有对象, 不能添加属性, 不能删除属性，但是可以修改原来存在的属性，但是不能使用Object.defineProperty设置访问属性
     return
   }
 
   // cater for pre-defined getter/setters
+  // * 直接获取对象属性配置上的setter和getter属性
   var getter = property && property.get;
   var setter = property && property.set;
   if ((!getter || setter) && arguments.length === 2) {
+    // * 如果满足没有getter或者存在setter并且参数只传了两个那么就会将obj[key]赋值给val暂存起来
     val = obj[key];
   }
 
+  // ? childOb是对val再一次递归观察, 这里如果发现 给对象添加响应式的 那一项 同样是一个对象
+  // ? 就会执行 observe(val) 因为这个函数只有当接收的对象是一个Object, 并且不是一个VNode才会继续下去
+  // ? 执行这个函数的时候就会去执行 Observe 类的构造函数, 然后就会触发 defineReactive 或者 observeArray
   var childOb = !shallow && observe(val);
+  // * 因此，data下面定义的数据无论是对象还是数组，最终都会深入到最底下一层，去添加观察者，将整个对象化为一个响应式对象
+  // * 所谓响应式对象，就是在对data下的对象或者数组，从上到下所有的属性都添加getter方法和setter方法
+  // * 也就是获取值的时候触发getter, 设置值的时候触发setter
   Object.defineProperty(obj, key, {
     enumerable: true,
     configurable: true,
     get: function reactiveGetter () {
+      // ! getter主要是 为了做依赖收集的事情
+      /* 
+        ! 总的来说，这个依赖收集，就是在render触发getter之后，会有一个当前正在计算的watcher(new Watcher的时候生成的)
+        ! 然后在这里把watcher订阅到数据变化中, 通过dep.depend, 调用当前watcher的addDep, addDep会执行addSub
+        ! 也就是当某个数据在触发getter进行依赖收集，就是收集当前正在计算的watcher，然后通过一通操作，把它(订阅者)push到watcher集合subs中
+        ! 这个watcher(订阅者)在数据变化的时候，触发setter会通知订阅者做一些其他操作
+
+        ! 换句话说，如果在Vue的代码中，将依赖收集也就是 dep.depend() 这一步给注释掉，那么响应式对象就不会做依赖收集, 
+        !在 watcher 集合 subs 中也不会存在一个需要更新watcher, 那么触发setter的时候, 这个watcher也就不会执行update了
+
+        ! 同时 Vue.set() 的触发 最终也是使用 ob.dep.notify() 来更新 subs 下面的所有watchers
+      */
+      // * 首先是拿到getter, 然后使用getter做计算，当然，没有getter就直接拿到这个值。毕竟getter属性主要是为了拿这个值
       var value = getter ? getter.call(obj) : val;
+      // TODO 下面就是依赖收集的过程
       if (Dep.target) {
+        // TODO Dep的target就是Dep类的一个全局watcher, 是一个可选的静态属性
+        // TODO Dep这个类主要是为了让数据和watcher之间建立一座桥梁
         dep.depend();
         if (childOb) {
+          // * 如果子value是一个对象, 就会进来
+          // ! 执行dep.depend() 去收集依赖
           childOb.dep.depend();
           if (Array.isArray(value)) {
             dependArray(value);
@@ -1270,8 +1281,12 @@ function defineReactive$$1 (
       return value
     },
     set: function reactiveSetter (newVal) {
+      // ! setter主要是为了做派发更新
+      // ! 在触发响应式对象成员更新的时候就会触发set方法，到最后执行 dep.notify() 就是在做通知，可以更新了
+      // * 首先会先拿到原来的值
       var value = getter ? getter.call(obj) : val;
       /* eslint-disable no-self-compare */
+      // * 然后将新的值和旧的值作对比，如果他们相等或者新的值立即发生变化并且旧的值被取代，都会立即返回
       if (newVal === value || (newVal !== newVal && value !== value)) {
         return
       }
@@ -1280,13 +1295,17 @@ function defineReactive$$1 (
         customSetter();
       }
       // #7981: for accessor properties without setter
+      // * 如果原来的对象上面存在getter但是没有setter就直接返回
       if (getter && !setter) { return }
       if (setter) {
+        // * 这两个操作都是将新的值给赋值给旧的值
         setter.call(obj, newVal);
       } else {
         val = newVal;
       }
+      // * 如果新的值使用一个对象，那么就会触发observe将新的值变成一个响应式的值
       childOb = !shallow && observe(newVal);
+      // ! dep.notify()就是派发更新的过程
       dep.notify();
     }
   });
@@ -1298,22 +1317,28 @@ function defineReactive$$1 (
  * already exist.
  */
 function set (target, key, val) {
+  // * set函数接收三个参数，第一个可以是数组也可以是Object，第二参数是任意类型，第三个参数也是任意类型
   if (process.env.NODE_ENV !== 'production' &&
     (isUndef(target) || isPrimitive(target))
   ) {
+    // * 第一个参数如果是基础类型或者是undefined, 那么就会有一个警告，因为对于基础类型或者不传入第一个参数，这个方法都没有任何意义
     warn(("Cannot set reactive property on undefined, null, or primitive value: " + ((target))));
   }
   if (Array.isArray(target) && isValidArrayIndex(key)) {
-    target.length = Math.max(target.length, key);
-    target.splice(key, 1, val);
+    // ? isValidArrayIndex 确保 key 是一个大于等于0的整数数字
+    target.length = Math.max(target.length, key); // * 首先修改数组的长度，他的长度取决于key和长度哪个更大，如果key更大，就说明在新增值
+    target.splice(key, 1, val); // * 然后将这个值直接插入到 key 这个 index 的后面, 或者修改该 index 的 值, 这种方式可以触发重新渲染
     return val
   }
   if (key in target && !(key in Object.prototype)) {
+    // * 首先判断key值是否存在于目标对象中，如果存在，那么使用target[key] = val 这种方式以及可以触发重新渲染了
     target[key] = val;
     return val
   }
-  var ob = (target).__ob__;
+  var ob = (target).__ob__; // * 否则就在此处拿到taget.__ob__属性
   if (target._isVue || (ob && ob.vmCount)) {
+    // * 如果target是一个Vue实例，或者ob上面有vmCount(有 vmCount 表示target是一个root data 也就是说是我们直接定义在 data 下面的)
+    // * 这两种条件满足任何一个都不行, 我们要避免对Vue实例或者root data 做Vue.set()
     process.env.NODE_ENV !== 'production' && warn(
       'Avoid adding reactive properties to a Vue instance or its root $data ' +
       'at runtime - declare it upfront in the data option.'
@@ -1321,10 +1346,13 @@ function set (target, key, val) {
     return val
   }
   if (!ob) {
+    // * 如果没有ob，也就是说 target 并不是一个响应式对象, 那么作为普通对象, 直接赋值就可以了
     target[key] = val;
     return val
   }
-  defineReactive$$1(ob.value, key, val);
+  // * 如果 target 是观测值, 这里将新的值也变成一个响应式对象
+  defineReactive(ob.value, key, val);
+  // * 手动调用 ob.dep.notify(), 也就是对所有的 watcher 队列中的内容执行update
   ob.dep.notify();
   return val
 }
@@ -1350,7 +1378,7 @@ function dependArray (value) {
  * how to merge a parent option value and a child option
  * value into the final value.
  */
-var strats = config.optionMergeStrategies;
+var strats = config.optionMergeStrategies; // * Object.create(null) 是一个空对象
 
 /**
  * Options with restrictions
@@ -1471,6 +1499,9 @@ function mergeHook (
   parentVal,
   childVal
 ) {
+  // * 如果childVal不存在，直接就返回parentVal
+  // * 如果childVal存在且parentVal存在，则两个直接合并
+  // * 如果childVal存在但parentVal不存在，则判断childVal是否为数组，如果是，则直接res就是childVal，如果不是，则将其添加到一个空数组的第一个
   var res = childVal
     ? parentVal
       ? parentVal.concat(childVal)
@@ -1478,12 +1509,14 @@ function mergeHook (
         ? childVal
         : [childVal]
     : parentVal;
+  // * 处理res，这个res是一个Array<Function>
   return res
     ? dedupeHooks(res)
     : res
 }
 
 function dedupeHooks (hooks) {
+  // * 去重,防止儿子和爹合并的时候产生了重复的hook
   var res = [];
   for (var i = 0; i < hooks.length; i++) {
     if (res.indexOf(hooks[i]) === -1) {
@@ -1494,6 +1527,7 @@ function dedupeHooks (hooks) {
 }
 
 LIFECYCLE_HOOKS.forEach(function (hook) {
+  // * 这里表示为strats中不同的hook都分配mergeHook 
   strats[hook] = mergeHook;
 });
 
@@ -1510,6 +1544,9 @@ function mergeAssets (
   vm,
   key
 ) {
+  // * 在这个合并策略中，会先构造一个parentVal
+  // * 这个Object.create()方法，会把传入的对象，挂载新的对象的原型上面
+  // * 静态类型合并比如说components, directive和filter之类的属性合并, 会执行这个合并策略, 将一些如keepalive之类的静态属性，添加到合并对象options的原型上
   var res = Object.create(parentVal || null);
   if (childVal) {
     process.env.NODE_ENV !== 'production' && assertObjectType(key, childVal, vm);
@@ -1603,16 +1640,14 @@ function assertObjectType (name, value, vm) {
 
 /*  */
 
-/*  */
-
-/*  */
-
 var callbacks = [];
 
 function flushCallbacks () {
+  // * 深拷贝 callbacks 数组第一层
   var copies = callbacks.slice(0);
-  callbacks.length = 0;
+  callbacks.length = 0; // * 清空callbacks数组
   for (var i = 0; i < copies.length; i++) {
+    // * 将 callbacks 数组(备份版)遍历并执行一遍
     copies[i]();
   }
 }
@@ -1623,7 +1658,12 @@ function flushCallbacks () {
 // UIWebView in iOS >= 9.3.3 when triggered in touch event handlers. It
 // completely stops working after triggering a few times... so, if native
 // Promise is available, we will use it:
+
+// nextTick行为利用了微任务队列，可以通过本机Promise.then或MutationObserver对其进行访问。
+// MutationObserver具有更广泛的支持，但是当在触摸事件处理程序中触发时，它在iOS> = 9.3.3的UIWebView中严重错误。触发几次后，它将完全停止工作...
+// 因此，如果本地Promise可用，我们将使用它：
 /* istanbul ignore next, $flow-disable-line */
+// * isNative表示浏览器原生支持, 这里首先要保证Promise可以使用，并且是原生支持的Promise
 if (typeof Promise !== 'undefined' && isNative(Promise)) ; else if (!isIE && typeof MutationObserver !== 'undefined' && (
   isNative(MutationObserver) ||
   // PhantomJS and iOS 7.x
@@ -1633,14 +1673,17 @@ if (typeof Promise !== 'undefined' && isNative(Promise)) ; else if (!isIE && typ
   // e.g. PhantomJS, iOS7, Android 4.4
   // (#6466 MutationObserver is unreliable in IE11)
   var counter = 1;
-  var observer = new MutationObserver(flushCallbacks);
-  var textNode = document.createTextNode(String(counter));
+  var observer = new MutationObserver(flushCallbacks); // * 定义一个新的MutationObserver实例
+  var textNode = document.createTextNode(String(counter)); // * 观察的DOM
+  // * 观察的DOM为textNode, 观察DOM节点的  characterData  变化,  变化的时候, 就会执行 flushCallbacks
+
+  // ? CharacterData 抽象接口（abstract interface）代表 Node 对象包含的字符。这是一个抽象接口，意味着没有 CharacterData 类型的对象。 
+  // ? 它是在其他接口中被实现的，如 Text、Comment 或 ProcessingInstruction 这些非抽象接口。
+  // ? 所以他监听的就是这个文本节点
   observer.observe(textNode, {
     characterData: true
   });
 } else if (typeof setImmediate !== 'undefined' && isNative(setImmediate)) ;
-
-/*  */
 
 /*  */
 
@@ -1668,11 +1711,9 @@ var isBooleanAttr = makeMap(
   'default,defaultchecked,defaultmuted,defaultselected,defer,disabled,' +
   'enabled,formnovalidate,hidden,indeterminate,inert,ismap,itemscope,loop,multiple,' +
   'muted,nohref,noresize,noshade,novalidate,nowrap,open,pauseonexit,readonly,' +
-  'required,reversed,scoped,seamless,selected,sortable,translate,' +
+  'required,reversed,scoped,seamless,selected,sortable,' +
   'truespeed,typemustmatch,visible'
 );
-
-/*  */
 
 /*  */
 
@@ -1717,8 +1758,6 @@ function getTagNamespace (tag) {
 }
 
 var isTextInputType = makeMap('text,number,password,search,email,tel,url');
-
-/*  */
 
 /*  */
 
@@ -2349,7 +2388,7 @@ function parseString (chr) {
 /*  */
 
 var onRE = /^@|^v-on:/;
-var dirRE = /^v-|^@|^:|^#/;
+var dirRE =  /^v-|^@|^:|^#/;
 var forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/;
 var forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/;
 var stripParensRE = /^\(|\)$/g;
@@ -2907,8 +2946,8 @@ function addIfCondition (el, condition) {
 }
 
 function processOnce (el) {
-  var once$$1 = getAndRemoveAttr(el, 'v-once');
-  if (once$$1 != null) {
+  var once = getAndRemoveAttr(el, 'v-once');
+  if (once != null) {
     el.once = true;
   }
 }
@@ -3836,9 +3875,9 @@ function genHandler (handler) {
       code += genModifierCode;
     }
     var handlerCode = isMethodPath
-      ? ("return " + (handler.value) + "($event)")
+      ? ("return " + (handler.value) + ".apply(null, arguments)")
       : isFunctionExpression
-        ? ("return (" + (handler.value) + ")($event)")
+        ? ("return (" + (handler.value) + ").apply(null, arguments)")
         : isFunctionInvocation
           ? ("return " + (handler.value))
           : handler.value;
@@ -3884,7 +3923,7 @@ function on (el, dir) {
 
 /*  */
 
-function bind$1 (el, dir) {
+function bind (el, dir) {
   el.wrapData = function (code) {
     return ("_b(" + code + ",'" + (el.tag) + "'," + (dir.value) + "," + (dir.modifiers && dir.modifiers.prop ? 'true' : 'false') + (dir.modifiers && dir.modifiers.sync ? ',true' : '') + ")")
   };
@@ -3894,7 +3933,7 @@ function bind$1 (el, dir) {
 
 var baseDirectives = {
   on: on,
-  bind: bind$1,
+  bind: bind,
   cloak: noop
 };
 
@@ -4398,15 +4437,15 @@ function genSlot (el, state) {
         dynamic: attr.dynamic
       }); }))
     : null;
-  var bind$$1 = el.attrsMap['v-bind'];
-  if ((attrs || bind$$1) && !children) {
+  var bind = el.attrsMap['v-bind'];
+  if ((attrs || bind) && !children) {
     res += ",null";
   }
   if (attrs) {
     res += "," + attrs;
   }
-  if (bind$$1) {
-    res += (attrs ? '' : ',null') + "," + bind$$1;
+  if (bind) {
+    res += (attrs ? '' : ',null') + "," + bind;
   }
   return res + ')'
 }
@@ -4426,7 +4465,7 @@ function genProps (props) {
   var dynamicProps = "";
   for (var i = 0; i < props.length; i++) {
     var prop = props[i];
-    var value = transformSpecialNewlines(prop.value);
+    var value =  transformSpecialNewlines(prop.value);
     if (prop.dynamic) {
       dynamicProps += (prop.name) + "," + value + ",";
     } else {
@@ -4651,7 +4690,7 @@ function createCompileToFunctionFn (compile) {
     vm
   ) {
     options = extend({}, options);
-    var warn$$1 = options.warn || warn;
+    var warn$1 = options.warn || warn;
     delete options.warn;
 
     /* istanbul ignore if */
@@ -4661,7 +4700,7 @@ function createCompileToFunctionFn (compile) {
         new Function('return 1');
       } catch (e) {
         if (e.toString().match(/unsafe-eval|CSP/)) {
-          warn$$1(
+          warn$1(
             'It seems you are using the standalone build of Vue.js in an ' +
             'environment with Content Security Policy that prohibits unsafe-eval. ' +
             'The template compiler cannot work in this environment. Consider ' +
@@ -4688,14 +4727,14 @@ function createCompileToFunctionFn (compile) {
       if (compiled.errors && compiled.errors.length) {
         if (options.outputSourceRange) {
           compiled.errors.forEach(function (e) {
-            warn$$1(
+            warn$1(
               "Error compiling template:\n\n" + (e.msg) + "\n\n" +
               generateCodeFrame(template, e.start, e.end),
               vm
             );
           });
         } else {
-          warn$$1(
+          warn$1(
             "Error compiling template:\n\n" + template + "\n\n" +
             compiled.errors.map(function (e) { return ("- " + e); }).join('\n') + '\n',
             vm
@@ -4725,7 +4764,7 @@ function createCompileToFunctionFn (compile) {
     /* istanbul ignore if */
     if (process.env.NODE_ENV !== 'production') {
       if ((!compiled.errors || !compiled.errors.length) && fnGenErrors.length) {
-        warn$$1(
+        warn$1(
           "Failed to generate render function:\n\n" +
           fnGenErrors.map(function (ref) {
             var err = ref.err;
@@ -5383,11 +5422,9 @@ var ref$1 = createCompiler$1(baseOptions);
 var compile$1 = ref$1.compile;
 var compileToFunctions$1 = ref$1.compileToFunctions;
 
-/*  */
-
-exports.parseComponent = parseComponent;
 exports.compile = compile;
 exports.compileToFunctions = compileToFunctions;
+exports.generateCodeFrame = generateCodeFrame;
+exports.parseComponent = parseComponent;
 exports.ssrCompile = compile$1;
 exports.ssrCompileToFunctions = compileToFunctions$1;
-exports.generateCodeFrame = generateCodeFrame;

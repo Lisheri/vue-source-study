@@ -4,9 +4,8 @@ import { mergeOptions } from '../util/index'
 
 export function initMixin (Vue: GlobalAPI) {
   Vue.mixin = function (mixin: Object) {
-    // * 可以看到mixin是用来合并options用的
-    // * 这里的this是大的Vue, 也就是Vue这个构造函数的this
-    // * 这个方法和组件在init时使用的方法一致，只是这样会将全局的mixin中的对象，合并到Vue.prototype.options中
+    // 通过mergeOptions将入参mixin对象中的所有成员, 全部拷贝到Vue.options这个静态成员上
+    // ? 因此通过Vue.mixin注册的混入, 是一个全局混入
     this.options = mergeOptions(this.options, mixin)
     return this
   }

@@ -221,6 +221,7 @@ const builds = {
 // * 定义成一个新的rollup打包对象，比如说input才是rollup需要的格式
 // * 这里就是rollup最终需要的打包配置
 function genConfig (name) {
+  // 这里的builds就是一系列的配置, 下面包含了各个版本的特定配置
   const opts = builds[name]
   const config = {
     input: opts.entry,

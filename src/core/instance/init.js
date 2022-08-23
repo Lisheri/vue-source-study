@@ -16,12 +16,12 @@ export function initMixin (Vue: Class<Component>) {
   // * 执行initMixin的时候就在原型上添加了一个_init方法
   // TODO _init方法主要是做了一堆初始化的工作，比如说_uid的定义、 options的定义
   Vue.prototype._init = function (options?: Object) {
-    // * Component这个interface详见flow下面的component.js自定义interface Component
-    // * 这里的vm指向组件实例的vm
+    // * 当前vue实例
     const vm: Component = this
-    // a uid
+    // a uid 唯一标识
     vm._uid = uid++
 
+    // * 开发环境下的性能检测, 与功能无关
     let startTag, endTag
     /* istanbul ignore if */
     if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
@@ -32,10 +32,12 @@ export function initMixin (Vue: Class<Component>) {
     }
 
     // a flag to avoid this being observed
+    // * 给vm对象添加标识, 标识vm是vue实例, 后续添加响应式数据时, 不对vm对象做处理
     vm._isVue = true
     // merge options
     // * 可以理解为将初始化的时候传入的options，都merge到this.$options上面，也就是说，我们可以使用this.$options访问到最初定义的很多东西
     // * 组件创建的时候执行this._init(options)还是要走这个，然后这里的options._isComponent在组件渲染的时候为true，将会执行initInternalComponent来合并options
+    // ? 下面的内容有一个共同点: 合并options(用户传入的options和构造函数的options)
     if (options && options._isComponent) {
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
@@ -50,7 +52,8 @@ export function initMixin (Vue: Class<Component>) {
       vm.$options = mergeOptions(
         // * vm.constructor指向Vue构造函数本身
         // * 因此在初始化的时候，这个参数代表的就是Vue构造函数上面的options
-        resolveConstructorOptions(vm.constructor), 
+        // * 之前初始化了一系列的指令等
+        resolveConstructorOptions(vm.constructor),
         // * 这个options，就是定义new Vue()的时候传入的配置，如el, created(), render()等
         options || {},
         // * 当前实例
@@ -67,16 +70,23 @@ export function initMixin (Vue: Class<Component>) {
     }
     // expose real self
     vm._self = vm
-    // * 这个比较关键
-    initLifecycle(vm) //TODO 初始化生命周期
-    initEvents(vm)  // TODO  初始化事件中心
-    initRender(vm) // TODO 
+    // * 初始化和生命周期相关的一些属性, 以及$parent/$root/$children/$refs
+    initLifecycle(vm)
+    // * 初始化事件监听, 同时获取父组件上的附加事件($listeners), 然后将其注册到当前组件
+    initEvents(vm)
+    // * 初始化render中所使用的h函数
+    // * $slots/$scopedSlots/_c/createElement/$attrs/$listeners
+    initRender(vm)
     // * 在beforeCreate中，vue-router，vuex都混入了一些逻辑
-    callHook(vm, 'beforeCreate') // TODO 执行beforeCreate, 在这个时候，是拿不到组件内部的数据的. 因为到此为止，只初始化了生命周期事件和渲染函数
-    initInjections(vm) // resolve injections before data/props // TODO 初始化全局注入
-    initState(vm) // TODO 初始化props和data
-    initProvide(vm) // resolve provide after data/props // TODO 
-    callHook(vm, 'created') // TODO 执行created, 在created中已经可以拿到需要的data, props之类的数据了，因为在这里，已经执行完了provide/inject的初始化，data， props的初始化
+    // * 执行beforeCreate, 在这个时候，是拿不到组件内部的数据的. 因为到此为止，只初始化了生命周期事件和渲染函数
+    callHook(vm, 'beforeCreate')
+    // * 初始化全局注入
+    initInjections(vm) // resolve injections before data/props
+    // * 初始化props和data
+    initState(vm)
+    initProvide(vm) // resolve provide after data/props
+    // * 执行created, 在created中已经可以拿到需要的data, props之类的数据了，因为在这里，已经执行完了provide/inject的初始化，data， props的初始化
+    callHook(vm, 'created')
     // * 也就是说在init的过程中，就会执行beforeCreate和created
 
     /* istanbul ignore if */

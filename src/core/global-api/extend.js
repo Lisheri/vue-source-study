@@ -19,38 +19,43 @@ export function initExtend (Vue: GlobalAPI) {
   // * extend 传入一个对象，返回是一个函数
   Vue.extend = function (extendOptions: Object): Function {
     extendOptions = extendOptions || {}
-    // * 这里的this并不是实例vm，而是Vue这个构造函数，因为extend是Vue的静态方法，并非原型上的方法
+    // * extend被Vue构造函数调用, 因此此处的this指向Vue这个构造函数，因为extend是Vue的静态方法，并非原型上的方法
     const Super = this
     // * Vue的cid
     const SuperId = Super.cid
     // * 这里实际上是在extendOptions上增加了一个构造器_Ctor，初始化为一个空对象
-    // * 实际上是做了一层缓存的优化
-    // ? 目前估计是下一次在渲染component的时候，如果在Vue上一级存在过这个component，也就会有一个对应的cid存在，那么就会直接取出来，得到该component对应的VNode
+    // * 实际上是做了一层缓存的优化, 从缓存中加载组件的构造函数
+    // ? 下一次再渲染当前component的时候，如果在Vue上已经存在过这个component，也就会有一个对应的cid存在，那么就会直接取出来，得到该component对应的VNode
     const cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {})
     if (cachedCtors[SuperId]) {
       return cachedCtors[SuperId]
     }
 
-    // * 定义了一个name, 如果在传过来的对象上不存在这个name，就会取Vue的options上面的name
+    // * 定义了一个name, 如果在传过来的对象上不存在这个name，则取Vue.options.name(全局options的name)
     const name = extendOptions.name || Super.options.name
     if (process.env.NODE_ENV !== 'production' && name) {
-      // * 这里是在开发环境对name做一次校验
+      // * 如果是开发环境则校验组件名称
       validateComponentName(name)
     }
 
-    // * 定义了一个子构造函数
+    // * 定义了一个组件构造函数
     const Sub = function VueComponent (options) {
       // * 所以这里执行this._init时，就会执行Vue.prototype._init方法
       this._init(options)
     }
-    // * 将子构造函数的原型都指向了父Vue的原型
+
+    // * 原型继承自Vue
+    // * 改变了子组件构造函数的原型, 让它的原型指向了Vue.prototype
     Sub.prototype = Object.create(Super.prototype)
     // * 将他原型上的constructor指回自己
     Sub.prototype.constructor = Sub
     //! 以上是一个简单的原型链继承，由于此处super指向Vue，因此Sub完全继承了Vue原型上的所有东西
+    // ! 这里也说明了在Vue2.6中所有的组件都是继承自Vue构造函数
+    // * cid自增
     Sub.cid = cid++
-    // * options做了一层合并，将自身的options和Vue的options做了一层合并
-    // * 局部注册组件，就会在此处合并options，extendOptions就是组件的options，Super.options表示Vue的options
+    // * 合并选项
+    // * 通过mergeOptions合并选线, 将入参的extendOptions和Vue.options(全局选项, 也是基础配置, 这也说明了所有子组件都包含全局的配置)合并
+    // * 局部注册组件，就会在此处合并选项
     Sub.options = mergeOptions(
       Super.options,
       extendOptions
@@ -95,7 +100,9 @@ export function initExtend (Vue: GlobalAPI) {
 
     // cache constructor
     // * 这里将Sub缓存下来，赋值给原来的那个Cid(Sub初始化的时候对原来的cid做了一次+1)
+    // * 将组件的构造函数缓存在options._Ctor
     cachedCtors[SuperId] = Sub
+    // * 返回组件的构造函数
     return Sub
     // * 这里的目的就是让Sub拥有和Vue一样的能力
   }

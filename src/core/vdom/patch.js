@@ -146,8 +146,7 @@ export function createPatchFunction (backend) {
     ownerArray,
     index
   ) {
-    // * vnode.elm代表该Virtual DOM 对应的真实DOM节点 初次渲染的时候对应的是挂载的#app
-    // * 但是初次渲染时候，没有ownerArray，因此并不会进入这个逻辑
+    // 判断vnode是否曾经渲染过, 以及当前节点是否存在子节点(ownerArray)
     if (isDef(vnode.elm) && isDef(ownerArray)) {
       // This vnode was used in a previous render! 这个vnode被用在了以前的渲染中
       // now it's used as a new node, overwriting its elm would cause 现在他作为一个新的vnode，覆盖它对应的真实dom用作插入参考节点时将会导致潜在的补丁错误
@@ -155,6 +154,7 @@ export function createPatchFunction (backend) {
       // reference node. Instead, we clone the node on-demand before creating
       // associated DOM element for it. 相反，我们在为节点创建关联DOM元素之前，按需克隆该节点
       // * 此处将会克隆一个vnode来覆盖vnode
+      // 主要是用于避开一些潜在的错误
       vnode = ownerArray[index] = cloneVNode(vnode)
     }
 
@@ -824,16 +824,18 @@ export function createPatchFunction (backend) {
         // patch existing root node
         patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly)
       } else {
-        // ? 如果新旧节点不同, 那就分成三个步骤: ①创建新的节点 ②更新父的占位符节点 ③删除旧的节点
+        // 首次渲染
         if (isRealElement) {
           // mounting to a real element
           // check if this is server-rendered content and if we can perform
           // a successful hydration.
+          // SSR相关
           if (oldVnode.nodeType === 1 && oldVnode.hasAttribute(SSR_ATTR)) {
             // * 服务端渲染(SSR)才会进来
             oldVnode.removeAttribute(SSR_ATTR)
             hydrating = true
           }
+          // SSR相关
           // * hydrating是false，因此也不会进来
           if (isTrue(hydrating)) {
             if (hydrate(oldVnode, vnode, insertedVnodeQueue)) {
@@ -857,21 +859,23 @@ export function createPatchFunction (backend) {
           oldVnode = emptyNodeAt(oldVnode)
         }
 
-        // ? ①创建新的节点
-        // ? 首先通过旧节点的dom, 拿到父亲的dom节点
-        // replacing existing element
-        // * 初次渲染的时候，这个elm，就是vue首次挂载的时候选择那个#app
+        // ? 如果新旧节点不同, 那就分成三个步骤: ①创建新的节点 ②更新父的占位符节点 ③删除旧的节点
+        // 接下来会将`oldVnode.elm`获取回来, 并冲新给一个元素叫做`oldElm`, 获取他的核心目的是要去找这个dom元素的父元素
         const oldElm = oldVnode.elm
-        // * 这个parentNode就是body
+        // 找到 oldElm的父元素
+        // 找父元素的目的是后面要将vnode转换成真实DOM, 并挂载到这个`parentElm`下面
         const parentElm = nodeOps.parentNode(oldElm)
-
+        
+        // ? ①创建新的节点
         // create new node
+        // 创建DOM节点
         createElm(
           vnode,
           insertedVnodeQueue,
           // extremely rare edge case: do not insert if old element is in a
           // leaving transition. Only happens when combining transition +
           // keep-alive + HOCs. (#4590)
+          // 如果当前正在执行一个 `transition`, 并且执行的是`leaving`从界面上消失的时候, 此时会将`parentElm`传null, 如果`parentElm`传null, 不会将新创建的dom元素挂载到界面上(前面说过), 而是暂存在内存中
           oldElm._leaveCb ? null : parentElm,
           nodeOps.nextSibling(oldElm) // * nextSibling 返回其父节点的 childNodes 列表中紧跟在其后面的节点, 也就是他的下一个兄弟节点
         )

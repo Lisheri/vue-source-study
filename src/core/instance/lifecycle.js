@@ -37,6 +37,7 @@ export function initLifecycle (vm: Component) {
 
   // locate first non-abstract parent
   // * 由于options合并过，因此这个options包含了Vue的options以及原来的五个成员，parent就代表当前层级的vm实例
+  // ? 到50行为止主要目的是为了找到当前vue实例(组件)的父组件, 然后将当前实例添加到当前组件的父组件的$children中
   let parent = options.parent
   if (parent && !options.abstract) {
     while (parent.$options.abstract && parent.$parent) {
@@ -82,7 +83,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
     vm._vnode = vnode
     // Vue.prototype.__patch__ is injected in entry points
     // based on the rendering backend used.
-    // * 所以在除此渲染的时候这个prevVnode是空值, 这个判断会直接进去, 表明是初次渲染
+    // * 首次渲染
     if (!prevVnode) {
       // initial render
       // * 子组件渲染的时候会再次调用patch，子组件创建的时候$el是undefined, vnode代表自己的虚拟dom， hydrating是false
