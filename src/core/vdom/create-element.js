@@ -121,7 +121,7 @@ export function _createElement (
     let Ctor
     // * 如果在实例上存在$vnode并且$vnode.ns存在，那么ns就是实例上面$vnode的ns，如果不存在，则返回字符串类型的tag
     ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag)
-    // * isReservedTag用于判断tag是不是一个原生的保留标签
+    // * isReservedTag用于判断tag是不是一个常规标签
     if (config.isReservedTag(tag)) {
       // platform built-in elements
       // * 如果data存在并且有一个带native修饰符的on事件，则直接抛错
@@ -156,7 +156,7 @@ export function _createElement (
       )
     }
   } else {
-    // * 局部注册
+    // * 全局组件
     // * 如果该标签直接就是一个导入的组件，直接进入此处，通过createComponent创建组件VNode
     // direct component options / constructor
     vnode = createComponent(tag, data, context, children)

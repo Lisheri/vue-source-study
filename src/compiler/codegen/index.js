@@ -21,6 +21,7 @@ export class CodegenState {
   staticRenderFns: Array<string>;
   pre: boolean;
 
+  // 这个对象中存储了一些和代码生成相关的属性和方法
   constructor (options: CompilerOptions) {
     this.options = options
     this.warn = options.warn || baseWarn
@@ -30,7 +31,9 @@ export class CodegenState {
     const isReservedTag = options.isReservedTag || no
     this.maybeComponent = (el: ASTElement) => !!el.component || !isReservedTag(el.tag)
     this.onceId = 0
+    // 在 staticRenderFns 中, 用于存储静态根节点生成的代码
     this.staticRenderFns = []
+    // 用于记录当前生成的节点是否使用v-pre标记
     this.pre = false
   }
 }
@@ -44,8 +47,11 @@ export function generate (
   ast: ASTElement | void,
   options: CompilerOptions
 ): CodegenResult {
+  // 首先创建一个 CodegenState 实例对象, 这个实例对象中全是代码生成过程中使用到的状态对象
   const state = new CodegenState(options)
+  // 根据AST是否存在, 选择是否调用 genElement开始生成代码, 否则返回一个 直接调用_c创建一个div空标签 的js代码
   const code = ast ? genElement(ast, state) : '_c("div")'
+  // 最终返回一个render, 也就是字符串js代码以及 staticRenderFns
   return {
     render: `with(this){return ${code}}`,
     staticRenderFns: state.staticRenderFns
@@ -53,34 +59,55 @@ export function generate (
 }
 
 export function genElement (el: ASTElement, state: CodegenState): string {
+  // 首先判断el对象是否有爹
   if (el.parent) {
+    // 如果有爹, 则会将当前节点的el.pre或者爹的pre记录到当前节点的pre上
+    // 主要是因为只要爹是v-pre标记的, 那么儿子们也是, 这个指令用于主动标记静态, 被v-pre标记的一定是静态节点
     el.pre = el.pre || el.parent.pre
   }
 
+  // 处理静态根节点(staticProcessed标记静态根节点已经被处理过, 不再处理)
   if (el.staticRoot && !el.staticProcessed) {
+    // genElement函数会被递归调用, 这里要滤除已经处理过的节点, 防止重复处理
     return genStatic(el, state)
   } else if (el.once && !el.onceProcessed) {
+    // 处理v-once的节点
     return genOnce(el, state)
   } else if (el.for && !el.forProcessed) {
+    // 处理v-for的节点
     return genFor(el, state)
   } else if (el.if && !el.ifProcessed) {
+    // 处理v-if的节点
     return genIf(el, state)
   } else if (el.tag === 'template' && !el.slotTarget && !state.pre) {
+    // 如果是template标签, 并且不是slot也不是pre, 则处理其内部的子节点生成代码
+    // 如果没有子节点, 返回"void 0", 表示undefined
     return genChildren(el, state) || 'void 0'
   } else if (el.tag === 'slot') {
+    // 处理slot标签
     return genSlot(el, state)
   } else {
+    // 静态根节点, 上述判断都不满足, 直接到这里
     // component or element
+    // 处理组件以及内置标签
     let code
     if (el.component) {
+      // 处理组件
       code = genComponent(el.component, el, state)
     } else {
+      // 非组件
       let data
       if (!el.plain || (el.pre && state.maybeComponent(el))) {
+        // 生成元素的属性/指令/事件等
+        // 处理各种指令, 包括 genDirectives(model/text/html)
+        // 首先将AST对象中的相应属性, 转换成createElement所需要的data对象的字符串形式(第二个参数)
         data = genData(el, state)
       }
 
+      // 处理子节点, 将el中的子节点转换成createElement中需要的数组形式, 也就是第三个参数
       const children = el.inlineTemplate ? null : genChildren(el, state, true)
+      // 调用完genChildren后, 就生成了render函数中所需要的代码
+      // 也就是调用_c, 传入标签, data, children(children中包含第四个参数, 也就是处理儿子的方式)
       code = `_c('${el.tag}'${
         data ? `,${data}` : '' // data
       }${
@@ -96,17 +123,31 @@ export function genElement (el: ASTElement, state: CodegenState): string {
 }
 
 // hoist static sub-trees out
+// 传入的el是静态根节点的AST对象
 function genStatic (el: ASTElement, state: CodegenState): string {
+  // 首先标记 staticProcessed, 表示已经处理
   el.staticProcessed = true
   // Some elements (templates) need to behave differently inside of a v-pre
   // node.  All pre nodes are static roots, so we can use this as a location to
   // wrap a state change and reset it upon exiting the pre node.
+  // 暂存 state.pre
   const originalPreState = state.pre
   if (el.pre) {
+    // 获取el对象的pre, 并赋值给state.pre
     state.pre = el.pre
   }
+  // 核心, 为staticRenderFns添加元素, 把静态根节点转换成生成VNode的对应js代码, 再次调用了genElement
+  // 这里使用数组, 是因为一个模板中, 可能有多个静态子节点
+  // 这里先把每一个静态子树对应的代码进行存储
   state.staticRenderFns.push(`with(this){return ${genElement(el, state)}}`)
+  // 还原原始状态中的pre
   state.pre = originalPreState
+  // 最后返回当前节点对应的代码
+  // 这里返回了_m的调用, 传入的是当前节点在staticRenderFns中对应的索引, 也就是刚刚生成的代码
+  // 这里其实最终实际传递的函数形式, 最终字符串形式的代码都会被转换成函数
+  // _m 就是 renderStatic, 首先从缓存中获取对应的renderStatic对应的代码, 就是通过上面的索引去查找的
+  // 如果没有就直接用staticRenderFns[index], 然后调用, 生成VNode节点, 然后将结果缓存
+  // 然偶调用 markStatic, 作用是将当前返回的VNode节点标记为静态的, 如果生成的节点是数组, 会遍历数组中所有的VNode调用markStaticNode打标记, 否则直接调用markStaticNode
   return `_m(${
     state.staticRenderFns.length - 1
   }${
@@ -216,6 +257,7 @@ export function genFor (
     '})'
 }
 
+// genData内部最终拼接的是一个普通的js对象的字符串形式, 根据el对象的属性, 去拼接相应的data, 最后返回data
 export function genData (el: ASTElement, state: CodegenState): string {
   let data = '{'
 
@@ -460,6 +502,8 @@ function genScopedSlot (
   return `{key:${el.slotTarget || `"default"`},fn:${fn}${reverseProxy}}`
 }
 
+// 主要作用就是将数组中的每一个AST对象, 通过调用genNode生成对应的代码形式
+// 最后把数组中的每一项, 通过join合并成逗号分割的字符串, 最终还会拼接上createElement最后的一个参数, 也就是如何拍平数组
 export function genChildren (
   el: ASTElement,
   state: CodegenState,
@@ -467,6 +511,7 @@ export function genChildren (
   altGenElement?: Function,
   altGenNode?: Function
 ): string | void {
+  // 首先判断el对象是否有子节点
   const children = el.children
   if (children.length) {
     const el: any = children[0]
@@ -481,10 +526,15 @@ export function genChildren (
         : ``
       return `${(altGenElement || genElement)(el, state)}${normalizationType}`
     }
+    // 首先获取createElement的第四个参数, 数组是否需要被拍平
     const normalizationType = checkSkip
       ? getNormalizationType(children, state.maybeComponent)
       : 0
+    // 获取一个gen函数, 首先会获取 altGenNode, 他是genChildren的第四个参数(在处理儿子节点的调用处是undefined), 这里是genNode
     const gen = altGenNode || genNode
+    // 调用map, 遍历数组中的每一个元素, 使用刚刚获取到的gen函数, 对每一个元素进行处理, 直接返回
+    // 最终将所有的子节点转换成相应的代码, 是通过gen函数去生成的
+    // 通过join方法, 将数组中的元素使用逗号进行分割最终返回一个字符串, 将结果存储到数组中
     return `[${children.map(c => gen(c, state)).join(',')}]${
       normalizationType ? `,${normalizationType}` : ''
     }`
@@ -522,17 +572,25 @@ function needsNormalization (el: ASTElement): boolean {
   return el.for !== undefined || el.tag === 'template' || el.tag === 'slot'
 }
 
+// 判断当前的AST对象的类型
 function genNode (node: ASTNode, state: CodegenState): string {
   if (node.type === 1) {
+    // 标签
     return genElement(node, state)
   } else if (node.type === 3 && node.isComment) {
+    // 注释节点
     return genComment(node)
   } else {
+    // 文本节点
     return genText(node)
   }
 }
 
+// 处理文本节点
 export function genText (text: ASTText | ASTExpression): string {
+  // _v用于创建文本的VNode节点
+  // type为2表示表达式, 直接返回即可, 因为表达式已经使用了_s转换成了字符串
+  // transformSpecialNewlines主要是将字符串代码中unicode形式的特殊换行进行修正, 防止意外情况
   return `_v(${text.type === 2
     ? text.expression // no need for () because already wrapped in _s()
     : transformSpecialNewlines(JSON.stringify(text.text))
@@ -540,6 +598,8 @@ export function genText (text: ASTText | ASTExpression): string {
 }
 
 export function genComment (comment: ASTText): string {
+  // 调用了_e, 创建了一个被标识为comment的注释节点
+  // JSON.stringify(comment.text)的作用是给内容加上引号 hello -> "hello", 因为这个代码是字符串形式, 如果不用他就要拼接字符型
   return `_e(${JSON.stringify(comment.text)})`
 }
 

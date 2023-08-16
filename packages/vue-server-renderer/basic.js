@@ -976,18 +976,19 @@
 
   Dep.prototype.notify = function notify () {
     // stabilize the subscriber list first
-    // * 这是一层简单的深拷贝
+    // 首先获取当前dep下的所有Watcher实例(使用slice浅拷贝第一层)
     var subs = this.subs.slice();
     if ( !config.async) {
       // subs aren't sorted in scheduler if not running async
       // we need to sort them now to make sure they fire in correct
       // order
-      // * 如果config.async为false, 就为订阅者排序
+      // * 如果config.async为false, 就为watcher排序
       subs.sort(function (a, b) { return a.id - b.id; });
     }
-    // * 遍历所有的订阅者，为他们进行更新
+    // * 遍历所有的订阅者，触发其update方法实现更新
     for (var i = 0, l = subs.length; i < l; i++) {
       // * subs中的数据都是watcher的实例, 所以subs[i].update()就是Watcher类中的update
+      // 调用update方法进行更新
       subs[i].update();
     }
   };
@@ -995,6 +996,7 @@
   // The current target watcher being evaluated.
   // This is globally unique because only one watcher
   // can be evaluated at a time.
+  // Dep.target 是用于存储当前正在执行的目标 watcher 对象, 并且他是全局唯一的, 同一时间, 只有一个Watcher正在被使用
   Dep.target = null;
   // * watcher栈
   var targetStack = [];
@@ -1027,9 +1029,10 @@
    */
 
   var arrayProto = Array.prototype;
-  // * Object.create(obj)是使用现有对象来提供新创建对象的__proto__, 也就是说arrayMethods.__proto__ = arrayProto
+  // 使用数组的原型创建一个新的对象, 对象的__proto__就是数组的原型
   var arrayMethods = Object.create(arrayProto);
 
+  // 修改数组元素的方法
   var methodsToPatch = [
     'push',
     'pop',
@@ -1045,9 +1048,10 @@
    */
   methodsToPatch.forEach(function (method) {
     // cache original method
+    // 保存数组原方法
     var original = arrayProto[method];
-    // * 这个 original 代表的是数组原型上原来的 push、 pop 等方法
     // * 改写原型上的方法，把它添加到 arrayMethods 上
+    // 调用Object.defineProperty 重新定义数组的方法
     def(arrayMethods, method, function mutator () {
       var args = [], len = arguments.length;
       while ( len-- ) args[ len ] = arguments[ len ];
@@ -1098,22 +1102,20 @@
     this.value = value;
     this.dep = new Dep();
     this.vmCount = 0;
-    // * def方法为value对象下的'__ob__'使用Object.defineproperty(value, '__ob__', {value: val(这个val就是this), enumerable: !!enumerable(此处没有传递，因此最后为false), writable: true, configurable: true})
-    // * 总的来说就是增加value.__ob__, 并且属性值指向当前实例 然后添加了一些属性, 默认为不可枚举
-    // * 主要是为了方便相同组件的data或者props有一次进入initState中，然后进入observe方法，对已经监听过的对象，就不用再来重新设置监听了，直接使用value.__ob__就可以了
-    // ? 至于为什么要使用Object.defineProperty而不是直接使用value.__ob__ = this, 后面再看
+    // def 基于 Object.defineProperty封装, 将value.__ob__设置为不可枚举, 防止后续设置getter和setter时, __ob__ 被遍历
+    // ? 不可枚举属性主要作用就是遍历隐身
     def(value, '__ob__', this);
     if (Array.isArray(value)) {
-      // * value是一个数组
       if (hasProto) {
-        // * 浏览器上有原型，因此非服务端渲染, 就会 使用这个 protoAugment
+        // 服务端渲染或部分浏览器环境下, 对象上没有 __proto__属性, 以此来区分是否服务端渲染
         protoAugment(value, arrayMethods);
       } else {
         copyAugment(value, arrayMethods, arrayKeys);
       }
-      // * 这个方法主要是当value是一个数组的时候，将value下面的每一个成员递归观察起来,也就是执行observe(value[i])
+      // * 遍历数组中的每一个对象, 创建一个 observer 实例
       this.observeArray(value);
     } else {
+      // * 遍历对象中的每一个属性, 添加getter/setter
       this.walk(value);
     }
   };
@@ -1124,10 +1126,11 @@
    * value type is Object.
    */
   Observer.prototype.walk = function walk (obj) {
+    // 获取观察对象的每一个属性
     var keys = Object.keys(obj);
     for (var i = 0; i < keys.length; i++) {
-      // * 到这里，就解决了上面的问题，为什么要用Object.defineProperty来添加value.__ob__而不是直接使用value.__ob__ = this
-      // * 如果直接将this赋值，那么value.__ob__也会执行defineReactive这个方法
+      // 遍历每个属性, 设置为响应式数据
+      // * 这里就是防止 __ob__被遍历的原因, 无需为 __ob__执行 defineReactive
       defineReactive(obj, keys[i]);
     }
   };
@@ -1173,15 +1176,17 @@
    * returns the new observer if successfully observed,
    * or the existing observer if the value already has one.
    */
-  // * observe接受两个参数，第一个是value，也就是需要添加监听的对象, 任意类型都可以，第二个是一个布尔值，表明是不是根数据
+  // * observe接受两个参数，第一个是value，也就是需要添加监听的对象, 任意类型都可以，第二个是一个布尔值，表明是不是根节点
   function observe (value, asRootData) {
+    // 首先判断是否是一个对象, 或者是否是VNode的一个实例
     if (!isObject(value) || value instanceof VNode) {
-      // * 在这里先判断需要添加的数据是否不是一个Object或者说是一个VNode，满足一个就直接返回
-      // * 所以说对于要观测的value，至少要是一个对象类型，并且不能是VNode
       return
     }
+    // 定义变量ob, 类型是 Observer, void表示初始化状态, 其实就是Observer的实例
     var ob;
+    // 判断是否存在 __ob__属性, 如果有需要进一步判断__ob__是否是Observer的实例
     if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
+      // 满足条件说明被监听过, 直接使用即可
       ob = value.__ob__;
     } else if (
       shouldObserve &&
@@ -1190,14 +1195,21 @@
       Object.isExtensible(value) &&
       !value._isVue
     ) {
-      // * shouldObserve用于控制对象是否需要添加监听, isServerRendering表示是否为服务端渲染, 并且监听对象必须要是一个数组或者一个对象(toString()后为[object object]这种)
-      // * 最后还要判断他不是一个Vue实例，Vue实例的isVue为true
-      // ! Observer实际上被定义为一个Class, 执行new Observer的时候就会执行下面的构造函数
+      // 没有该属性, 所以需要创建
+      // 创建之前需要判断一下当前对象是否可以进行响应式处理
+      // * shouldObserve用于控制对象是否需要添加监听, isServerRendering表示是否为服务端渲染
+      // 核心就是判断当前对象是否是一个数组, 或者是一个纯粹的JS对象(Object.prototype.string.call(obj) === '[object Object]')
+      // isExtensible判断当前对象是否是可扩展的(Object.seal和Object.freeze是不可扩展的, 或者使用Object.preventExtensions处理一次)
+      // 然后看当前对象是否是Vue实例, 之前初始化Vue的时候给了一个属性, 就是_isVue, 就是要在这里过滤掉vue实例
+      // 创建一个 Observer 对象, 执行Observer构造函数, 在其中就要把value的所有属性转换为getter和setter
       ob = new Observer(value);
     }
+    // 返回前需要判断一下 asRootData, 初始化Vue实例时这里是true, 表示是根数据
     if (asRootData && ob) {
+      // 根数据需要 ob.vmCount++, 进行计数
       ob.vmCount++;
     }
+    // 最终将创建好的observer返回
     return ob
   }
 
@@ -1211,77 +1223,70 @@
     customSetter,
     shallow
   ) {
+    // 创建依赖对象实例, 主要是为当前属性收集依赖, 也就是收集观察当前属性的所有 Watcher
     var dep = new Dep();
 
-    // * Object.getOwnPropertyDescriptor该方法返回的是指定对象属性上的描述符
+    // * 获取当前对象上指定属性的属性描述符(通过Object.defineProperty定义的第三个属性, 就是属性描述符, 其中可以定义getter/setter等)
     var property = Object.getOwnPropertyDescriptor(obj, key);
+    // configurable 用于确定当前属性是否是可配置的
     if (property && property.configurable === false) {
       // * 如果该属性存在，但是configurable为false, 那么就直接返回，因为property.configurable为false表示该属性不可修改
-      // * 这种一般是主动设置，或者使用Object.freeze方法，冻结对象， 也可以使用Object.seal()将目标对象改为不可扩展, configurable设置为false
-      // * 也就是凡是存在一个属性是不可配置的, 就不会添加监听了, 会直接返回
-
-      // ! Object.freeze冻结整个对象，整个对象不能添加也不能删除并且不能修改原有的属性, 
-      // ! 而Object.seal() 是封闭原有对象, 不能添加属性, 不能删除属性，但是可以修改原来存在的属性，但是不能使用Object.defineProperty设置访问属性
+      // * 如果说当前属性是不可配置的, 就说明当前属性不能通过 delete 被删除, 也不能通过Object.defineProperty 重新定义
+      // * 由于后续需要使用Object.defineProperty重新定义, 所以说如果不可配置, 这里直接返回
+      // ? 一般也使用Object.seal() 或 Object.freeze 或者直接使用Object.defineProperty 将 configurable设置为false, 阻止data中的属性被监听, 减少运行时开销, 尤其是一个大体积的对象且该对象还不需要驱动视图更新
       return
     }
 
     // cater for pre-defined getter/setters
     // * 直接获取对象属性配置上的setter和getter属性
+    // ? 因为Object对象可能是用户传入的, 用户传入时, 可能已经给对象中的属性设置过setter和getter, 先取出来, 后面重写, 增加派发更新和依赖收集的功能
     var getter = property && property.get;
     var setter = property && property.set;
+    // 特殊情况判断, arguments.length === 2 表示是在 walk 调用的
     if ((!getter || setter) && arguments.length === 2) {
       // * 如果满足没有getter或者存在setter并且参数只传了两个那么就会将obj[key]赋值给val暂存起来
       val = obj[key];
     }
 
-    // ? childOb是对val再一次递归观察, 这里如果发现 给对象添加响应式的 那一项 同样是一个对象
-    // ? 就会执行 observe(val) 因为这个函数只有当接收的对象是一个Object, 并且不是一个VNode才会继续下去
-    // ? 执行这个函数的时候就会去执行 Observe 类的构造函数, 然后就会触发 defineReactive 或者 observeArray
+    // 判断是否递归观察子对象, 并将子对象属性都转换成 getter/setter 返回子观察对象
+    // ? !shallow表示非浅层监听
     var childOb = !shallow && observe(val);
     // * 因此，data下面定义的数据无论是对象还是数组，最终都会深入到最底下一层，去添加观察者，将整个对象化为一个响应式对象
     // * 所谓响应式对象，就是在对data下的对象或者数组，从上到下所有的属性都添加getter方法和setter方法
-    // * 也就是获取值的时候触发getter, 设置值的时候触发setter
+    // 转换响应式对象
     Object.defineProperty(obj, key, {
-      enumerable: true,
-      configurable: true,
+      enumerable: true, // 可枚举的
+      configurable: true, // 可配置的
       get: function reactiveGetter () {
-        // ! getter主要是 为了做依赖收集的事情
-        /* 
-          ! 总的来说，这个依赖收集，就是在render触发getter之后，会有一个当前正在计算的watcher(new Watcher的时候生成的)
-          ! 然后在这里把watcher订阅到数据变化中, 通过dep.depend, 调用当前watcher的addDep, addDep会执行addSub
-          ! 也就是当某个数据在触发getter进行依赖收集，就是收集当前正在计算的watcher，然后通过一通操作，把它(订阅者)push到watcher集合subs中
-          ! 这个watcher(订阅者)在数据变化的时候，触发setter会通知订阅者做一些其他操作
-
-          ! 换句话说，如果在Vue的代码中，将依赖收集也就是 dep.depend() 这一步给注释掉，那么响应式对象就不会做依赖收集, 
-          !在 watcher 集合 subs 中也不会存在一个需要更新watcher, 那么触发setter的时候, 这个watcher也就不会执行update了
-
-          ! 同时 Vue.set() 的触发 最终也是使用 ob.dep.notify() 来更新 subs 下面的所有watchers
-        */
-        // * 首先是拿到getter, 然后使用getter做计算，当然，没有getter就直接拿到这个值。毕竟getter属性主要是为了拿这个值
+        // 获取当前值, 有getter则直接用getter获取, 没有getter说明之前缓存过当前值, 直接获取即可
         var value = getter ? getter.call(obj) : val;
-        // TODO 下面就是依赖收集的过程
+        // 如果存在当前依赖目标, 即 watcher 对象, 则建立依赖
         if (Dep.target) {
-          // TODO Dep的target就是Dep类的一个全局watcher, 是一个可选的静态属性
-          // TODO Dep这个类主要是为了让数据和watcher之间建立一座桥梁
+          // * Dep的target就是Dep类的一个全局watcher, 是一个可选的静态属性
+          // * Dep这个类主要是为了让数据和watcher之间建立一座桥梁
           dep.depend();
+          // 如果子观察目标存在, 建立子对象的依赖关系
           if (childOb) {
             // * 如果子value是一个对象, 就会进来
             // ! 执行dep.depend() 去收集依赖
             childOb.dep.depend();
+            // * 如果属性是数组, 则特殊处理收集数组对象依赖
             if (Array.isArray(value)) {
               dependArray(value);
             }
           }
         }
+        // 返回属性值
         return value
       },
       set: function reactiveSetter (newVal) {
         // ! setter主要是为了做派发更新
         // ! 在触发响应式对象成员更新的时候就会触发set方法，到最后执行 dep.notify() 就是在做通知，可以更新了
-        // * 首先会先拿到原来的值
+        // * 首先获取当前属性值
         var value = getter ? getter.call(obj) : val;
         /* eslint-disable no-self-compare */
-        // * 然后将新的值和旧的值作对比，如果他们相等或者新的值立即发生变化并且旧的值被取代，都会立即返回
+        // * 值没有变化则不需要派发更新
+        // ? newVal !== newVal && value !== value 用于确定这两个值是否为NaN, 其实可以用Object.is
         if (newVal === value || (newVal !== newVal && value !== value)) {
           return
         }
@@ -1290,17 +1295,17 @@
           customSetter();
         }
         // #7981: for accessor properties without setter
-        // * 如果原来的对象上面存在getter但是没有setter就直接返回
+        // * 如果原来的对象上面存在getter但是没有setter就直接返回, 说明当前属性是只读的
         if (getter && !setter) { return }
         if (setter) {
-          // * 这两个操作都是将新的值给赋值给旧的值
           setter.call(obj, newVal);
         } else {
           val = newVal;
         }
-        // * 如果新的值使用一个对象，那么就会触发observe将新的值变成一个响应式的值
+        // * 如果新的值使用一个对象，那么就会触发observe将新的值变成一个响应式的值, 并返回 子 `observer` 对象
         childOb = !shallow && observe(newVal);
         // ! dep.notify()就是派发更新的过程
+        // 派发更新(发布更改通知)
         dep.notify();
       }
     });
@@ -2158,7 +2163,7 @@
   var callbacks = [];
 
   function flushCallbacks () {
-    // * 深拷贝 callbacks 数组第一层
+    // * 浅拷贝 callbacks 数组第一层
     var copies = callbacks.slice(0);
     callbacks.length = 0; // * 清空callbacks数组
     for (var i = 0; i < copies.length; i++) {
@@ -3010,6 +3015,7 @@
     removeFromMap
   ) {
     var val;
+    // 先获取el.attrsMap中标签上的属性
     if ((val = el.attrsMap[name]) != null) {
       var list = el.attrsList;
       for (var i = 0, l = list.length; i < l; i++) {
@@ -3019,9 +3025,11 @@
         }
       }
     }
+    // 获取完毕后, 需要移除标签上的属性
     if (removeFromMap) {
       delete el.attrsMap[name];
     }
+    // 返回获取的属性对应的值
     return val
   }
 
@@ -3492,15 +3500,22 @@
    */
 
   // Regular Expressions for parsing tags and attributes
+  // 在这里定义了一堆正则表达式, 作用是用于匹配html字符串模板中的内容
+  // 匹配标签中的属性, 其中包括指令
   var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
   var dynamicArgAttribute = /^\s*((?:v-[\w-]+:|@|:|#)\[[^=]+?\][^\s"'<>\/=]*)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
   var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z" + (unicodeRegExp.source) + "]*";
   var qnameCapture = "((?:" + ncname + "\\:)?" + ncname + ")";
+  // 匹配打开的开始标签
   var startTagOpen = new RegExp(("^<" + qnameCapture));
+  // 匹配闭合的开始标签
   var startTagClose = /^\s*(\/?)>/;
+  // 匹配结束标签
   var endTag = new RegExp(("^<\\/" + qnameCapture + "[^>]*>"));
+  // 匹配文档声明
   var doctype = /^<!DOCTYPE [^>]+>/i;
   // #7298: escape - to avoid being passed as HTML comment when inlined in page
+  // 匹配文档中的注释
   var comment = /^<!\--/;
   var conditionalComment = /^<!\[/;
 
@@ -3536,6 +3551,8 @@
     var canBeLeftOpenTag = options.canBeLeftOpenTag || no;
     var index = 0;
     var last, lastTag;
+    // html就是模板字符串
+    // 他会将处理完的文本截取掉, 继续去处理剩余的部分
     while (html) {
       last = html;
       // Make sure we're not in a plaintext content element like script/style
@@ -3543,19 +3560,25 @@
         var textEnd = html.indexOf('<');
         if (textEnd === 0) {
           // Comment:
+          // 处理注释
           if (comment.test(html)) {
             var commentEnd = html.indexOf('-->');
 
             if (commentEnd >= 0) {
               if (options.shouldKeepComment) {
+                // 如果当前找到注释标签, 并且调用comment方法后
+                // 这个comment, 是调用parseHTML时, 传递进来的方法
                 options.comment(html.substring(4, commentEnd), index, index + commentEnd + 3);
               }
+              // 调用advance, 这个方法的作用就是记录最新处理的位置, 然后从处理完毕的位置, 截取剩余html
               advance(commentEnd + 3);
+              // 继续去处理剩余的html, 直到处理完毕
               continue
             }
           }
 
           // http://en.wikipedia.org/wiki/Conditional_comment#Downlevel-revealed_conditional_comment
+          // 继续通过正则匹配是否为条件注释（<!--[if IE 9]> 仅IE9可识别 <![endif]-->）这种
           if (conditionalComment.test(html)) {
             var conditionalEnd = html.indexOf(']>');
 
@@ -3566,6 +3589,7 @@
           }
 
           // Doctype:
+          // 文档声明
           var doctypeMatch = html.match(doctype);
           if (doctypeMatch) {
             advance(doctypeMatch[0].length);
@@ -3573,6 +3597,7 @@
           }
 
           // End tag:
+          // 结束标签
           var endTagMatch = html.match(endTag);
           if (endTagMatch) {
             var curIndex = index;
@@ -3583,6 +3608,7 @@
 
           // Start tag:
           var startTagMatch = parseStartTag();
+          // 判断是否是开始标签
           if (startTagMatch) {
             handleStartTag(startTagMatch);
             if (shouldIgnoreFirstNewline(startTagMatch.tagName, html)) {
@@ -3658,7 +3684,9 @@
     parseEndTag();
 
     function advance (n) {
+      // 首先记录当前最新的位置
       index += n;
+      // 然后从处理完毕的位置, 截取html
       html = html.substring(n);
     }
 
@@ -3687,6 +3715,7 @@
       }
     }
 
+    // 这里做了很多处理, 还会解析标签中的属性
     function handleStartTag (match) {
       var tagName = match.tagName;
       var unarySlash = match.unarySlash;
@@ -3726,6 +3755,8 @@
       }
 
       if (options.start) {
+        // 当对开始标签处理完毕后, 最终调用了options.start这个方法, 并把解析好的标签名, 属性, 是否一元标签(自闭和), 起始结束位置, 传递给start方法
+        // start方法是调用parseHTML时传递进来的
         options.start(tagName, attrs, unary, match.start, match.end);
       }
     }
@@ -3966,6 +3997,7 @@
   var platformGetTagNamespace;
   var maybeComponent;
 
+  // 这个函数非常简单, 就是返回了一个对象, 这个对象就是AST对象
   function createASTElement (
     tag,
     attrs,
@@ -3974,7 +4006,9 @@
     return {
       type: 1,
       tag: tag,
+       // 标签的属性数组, 这里面是存储了一个一个属性对, 内容为{name: 属性名, value: 属性值, start: 开始位置, end: 结束位置}
       attrsList: attrs,
+      // 通过调用 makeAttrsMap, 将上面的属性数组, 转换为对象的形式, 键名就是属性名, 简直就是属性值, 去除了开始结束位置
       attrsMap: makeAttrsMap(attrs),
       rawAttrsMap: {},
       parent: parent,
@@ -3989,6 +4023,7 @@
     template,
     options
   ) {
+    // 1. 解析options中的成员
     warn$1 = options.warn || baseWarn;
 
     platformIsPreTag = options.isPreTag || no;
@@ -4002,7 +4037,7 @@
     postTransforms = pluckModuleFunction(options.modules, 'postTransformNode');
 
     delimiters = options.delimiters;
-
+    // 定义了一些变量和函数
     var stack = [];
     var preserveWhitespace = options.preserveWhitespace !== false;
     var whitespaceOption = options.whitespace;
@@ -4110,6 +4145,8 @@
       }
     }
 
+    // 2 调用parseHTML对模板进行解析(核心)
+    // 当parseHTML处理完毕后, 就把模板全部转换成了AST对象
     parseHTML(template, {
       warn: warn$1,
       expectHTML: options.expectHTML,
@@ -4119,7 +4156,9 @@
       shouldDecodeNewlinesForHref: options.shouldDecodeNewlinesForHref,
       shouldKeepComment: options.comments,
       outputSourceRange: options.outputSourceRange,
+      // 解析过程中的回调函数, 生成AST, 这里的start, end, chars, comment, 都是处理完对应的内容之后来调用的
       start: function start (tag, attrs, unary, start$1, end) {
+        // start方法是在解析到开始标签后调用的
         // check namespace.
         // inherit parent ns if there is one
         var ns = (currentParent && currentParent.ns) || platformGetTagNamespace(tag);
@@ -4130,11 +4169,13 @@
           attrs = guardIESVGBug(attrs);
         }
 
+        // 在start方法中, 调用了 createASTElement, 创建AST对象
         var element = createASTElement(tag, attrs, currentParent);
         if (ns) {
           element.ns = ns;
         }
 
+        // 生成AST之后, 开始给各种属性去赋值
         {
           if (options.outputSourceRange) {
             element.start = start$1;
@@ -4174,6 +4215,7 @@
         }
 
         if (!inVPre) {
+          // 开始处理指令, processPre用于处理v-pre这个指令
           processPre(element);
           if (element.pre) {
             inVPre = true;
@@ -4186,8 +4228,12 @@
           processRawAttrs(element);
         } else if (!element.processed) {
           // structural directives
+          // 处理结构化指令
+          // v-for
           processFor(element);
+          // v-if
           processIf(element);
+          // v-once
           processOnce(element);
         }
 
@@ -4305,11 +4351,14 @@
         }
       }
     });
+    // 3 最后返回了一个root变量, 这个root里面存储的就是解析好的ast对象
     return root
   }
 
   function processPre (el) {
+    // 调用了 getAndRemoveAttr 函数用于获取 v-pre指令, 然后再从AST中移除对应的属性
     if (getAndRemoveAttr(el, 'v-pre') != null) {
+      // 如果该属性存在, 则会通过pre这个属性记录到AST中
       el.pre = true;
     }
   }
@@ -4431,22 +4480,29 @@
     return res
   }
 
+  // 处理v-if
   function processIf (el) {
+    // 首先获取AST上v-if指令的值, 如果有, 则从AST中删除, 并返回该值, 记录到exp
     var exp = getAndRemoveAttr(el, 'v-if');
     if (exp) {
+      // 将v-if的值记录到el.if属性中
       el.if = exp;
+      // 调用 addIfCondition, 
       addIfCondition(el, {
         exp: exp,
         block: el
       });
     } else {
+      // 接着处理v-else
       if (getAndRemoveAttr(el, 'v-else') != null) {
         el.else = true;
       }
+      // 处理v-else-if
       var elseif = getAndRemoveAttr(el, 'v-else-if');
       if (elseif) {
         el.elseif = elseif;
       }
+      // 过程都是相似的, 就是在AST对象的属性中记录相关的数据
     }
   }
 
@@ -4484,10 +4540,13 @@
     }
   }
 
+  // 这个函数的作用就是把当前v-if的值和对应的AST对象一起存储到ifConditions数组中
   function addIfCondition (el, condition) {
     if (!el.ifConditions) {
+      // 初始化ifConditions数组
       el.ifConditions = [];
     }
+    // 将当前v-if对象({ exp, el })存储到ifConditions数组中
     el.ifConditions.push(condition);
   }
 
@@ -5371,7 +5430,9 @@
     var isReservedTag = options.isReservedTag || no;
     this.maybeComponent = function (el) { return !!el.component || !isReservedTag(el.tag); };
     this.onceId = 0;
+    // 在 staticRenderFns 中, 用于存储静态根节点生成的代码
     this.staticRenderFns = [];
+    // 用于记录当前生成的节点是否使用v-pre标记
     this.pre = false;
   };
 
@@ -5381,8 +5442,11 @@
     ast,
     options
   ) {
+    // 首先创建一个 CodegenState 实例对象, 这个实例对象中全是代码生成过程中使用到的状态对象
     var state = new CodegenState(options);
+    // 根据AST是否存在, 选择是否调用 genElement开始生成代码, 否则返回一个 直接调用_c创建一个div空标签 的js代码
     var code = ast ? genElement(ast, state) : '_c("div")';
+    // 最终返回一个render, 也就是字符串js代码以及 staticRenderFns
     return {
       render: ("with(this){return " + code + "}"),
       staticRenderFns: state.staticRenderFns
@@ -5390,34 +5454,55 @@
   }
 
   function genElement (el, state) {
+    // 首先判断el对象是否有爹
     if (el.parent) {
+      // 如果有爹, 则会将当前节点的el.pre或者爹的pre记录到当前节点的pre上
+      // 主要是因为只要爹是v-pre标记的, 那么儿子们也是, 这个指令用于主动标记静态, 被v-pre标记的一定是静态节点
       el.pre = el.pre || el.parent.pre;
     }
 
+    // 处理静态根节点(staticProcessed标记静态根节点已经被处理过, 不再处理)
     if (el.staticRoot && !el.staticProcessed) {
+      // genElement函数会被递归调用, 这里要滤除已经处理过的节点, 防止重复处理
       return genStatic(el, state)
     } else if (el.once && !el.onceProcessed) {
+      // 处理v-once的节点
       return genOnce(el, state)
     } else if (el.for && !el.forProcessed) {
+      // 处理v-for的节点
       return genFor(el, state)
     } else if (el.if && !el.ifProcessed) {
+      // 处理v-if的节点
       return genIf(el, state)
     } else if (el.tag === 'template' && !el.slotTarget && !state.pre) {
+      // 如果是template标签, 并且不是slot也不是pre, 则处理其内部的子节点生成代码
+      // 如果没有子节点, 返回"void 0", 表示undefined
       return genChildren(el, state) || 'void 0'
     } else if (el.tag === 'slot') {
+      // 处理slot标签
       return genSlot(el, state)
     } else {
+      // 静态根节点, 上述判断都不满足, 直接到这里
       // component or element
+      // 处理组件以及内置标签
       var code;
       if (el.component) {
+        // 处理组件
         code = genComponent(el.component, el, state);
       } else {
+        // 非组件
         var data;
         if (!el.plain || (el.pre && state.maybeComponent(el))) {
+          // 生成元素的属性/指令/事件等
+          // 处理各种指令, 包括 genDirectives(model/text/html)
+          // 首先将AST对象中的相应属性, 转换成createElement所需要的data对象的字符串形式(第二个参数)
           data = genData$2(el, state);
         }
 
+        // 处理子节点, 将el中的子节点转换成createElement中需要的数组形式, 也就是第三个参数
         var children = el.inlineTemplate ? null : genChildren(el, state, true);
+        // 调用完genChildren后, 就生成了render函数中所需要的代码
+        // 也就是调用_c, 传入标签, data, children(children中包含第四个参数, 也就是处理儿子的方式)
         code = "_c('" + (el.tag) + "'" + (data ? ("," + data) : '') + (children ? ("," + children) : '') + ")";
       }
       // module transforms
@@ -5429,17 +5514,31 @@
   }
 
   // hoist static sub-trees out
+  // 传入的el是静态根节点的AST对象
   function genStatic (el, state) {
+    // 首先标记 staticProcessed, 表示已经处理
     el.staticProcessed = true;
     // Some elements (templates) need to behave differently inside of a v-pre
     // node.  All pre nodes are static roots, so we can use this as a location to
     // wrap a state change and reset it upon exiting the pre node.
+    // 暂存 state.pre
     var originalPreState = state.pre;
     if (el.pre) {
+      // 获取el对象的pre, 并赋值给state.pre
       state.pre = el.pre;
     }
+    // 核心, 为staticRenderFns添加元素, 把静态根节点转换成生成VNode的对应js代码, 再次调用了genElement
+    // 这里使用数组, 是因为一个模板中, 可能有多个静态子节点
+    // 这里先把每一个静态子树对应的代码进行存储
     state.staticRenderFns.push(("with(this){return " + (genElement(el, state)) + "}"));
+    // 还原原始状态中的pre
     state.pre = originalPreState;
+    // 最后返回当前节点对应的代码
+    // 这里返回了_m的调用, 传入的是当前节点在staticRenderFns中对应的索引, 也就是刚刚生成的代码
+    // 这里其实最终实际传递的函数形式, 最终字符串形式的代码都会被转换成函数
+    // _m 就是 renderStatic, 首先从缓存中获取对应的renderStatic对应的代码, 就是通过上面的索引去查找的
+    // 如果没有就直接用staticRenderFns[index], 然后调用, 生成VNode节点, 然后将结果缓存
+    // 然偶调用 markStatic, 作用是将当前返回的VNode节点标记为静态的, 如果生成的节点是数组, 会遍历数组中所有的VNode调用markStaticNode打标记, 否则直接调用markStaticNode
     return ("_m(" + (state.staticRenderFns.length - 1) + (el.staticInFor ? ',true' : '') + ")")
   }
 
@@ -5541,6 +5640,7 @@
       '})'
   }
 
+  // genData内部最终拼接的是一个普通的js对象的字符串形式, 根据el对象的属性, 去拼接相应的data, 最后返回data
   function genData$2 (el, state) {
     var data = '{';
 
@@ -5764,6 +5864,8 @@
     return ("{key:" + (el.slotTarget || "\"default\"") + ",fn:" + fn + reverseProxy + "}")
   }
 
+  // 主要作用就是将数组中的每一个AST对象, 通过调用genNode生成对应的代码形式
+  // 最后把数组中的每一项, 通过join合并成逗号分割的字符串, 最终还会拼接上createElement最后的一个参数, 也就是如何拍平数组
   function genChildren (
     el,
     state,
@@ -5771,6 +5873,7 @@
     altGenElement,
     altGenNode
   ) {
+    // 首先判断el对象是否有子节点
     var children = el.children;
     if (children.length) {
       var el$1 = children[0];
@@ -5785,10 +5888,15 @@
           : "";
         return ("" + ((altGenElement || genElement)(el$1, state)) + normalizationType)
       }
+      // 首先获取createElement的第四个参数, 数组是否需要被拍平
       var normalizationType$1 = checkSkip
         ? getNormalizationType(children, state.maybeComponent)
         : 0;
+      // 获取一个gen函数, 首先会获取 altGenNode, 他是genChildren的第四个参数(在处理儿子节点的调用处是undefined), 这里是genNode
       var gen = altGenNode || genNode;
+      // 调用map, 遍历数组中的每一个元素, 使用刚刚获取到的gen函数, 对每一个元素进行处理, 直接返回
+      // 最终将所有的子节点转换成相应的代码, 是通过gen函数去生成的
+      // 通过join方法, 将数组中的元素使用逗号进行分割最终返回一个字符串, 将结果存储到数组中
       return ("[" + (children.map(function (c) { return gen(c, state); }).join(',')) + "]" + (normalizationType$1 ? ("," + normalizationType$1) : ''))
     }
   }
@@ -5824,23 +5932,33 @@
     return el.for !== undefined || el.tag === 'template' || el.tag === 'slot'
   }
 
+  // 判断当前的AST对象的类型
   function genNode (node, state) {
     if (node.type === 1) {
+      // 标签
       return genElement(node, state)
     } else if (node.type === 3 && node.isComment) {
+      // 注释节点
       return genComment(node)
     } else {
+      // 文本节点
       return genText(node)
     }
   }
 
+  // 处理文本节点
   function genText (text) {
+    // _v用于创建文本的VNode节点
+    // type为2表示表达式, 直接返回即可, 因为表达式已经使用了_s转换成了字符串
+    // transformSpecialNewlines主要是将字符串代码中unicode形式的特殊换行进行修正, 防止意外情况
     return ("_v(" + (text.type === 2
       ? text.expression // no need for () because already wrapped in _s()
       : transformSpecialNewlines(JSON.stringify(text.text))) + ")")
   }
 
   function genComment (comment) {
+    // 调用了_e, 创建了一个被标识为comment的注释节点
+    // JSON.stringify(comment.text)的作用是给内容加上引号 hello -> "hello", 因为这个代码是字符串形式, 如果不用他就要拼接字符型
     return ("_e(" + (JSON.stringify(comment.text)) + ")")
   }
 
@@ -6562,16 +6680,20 @@
 
 
 
+  // 通过new Function将字符串形式的代码转换为函数
+  // 通过try catch包裹一层, 如果转换过程中有错, 则将错误信息存储起来, 并返回空函数
   function createFunction (code, errors) {
     try {
       return new Function(code)
     } catch (err) {
+      // 收集错误信息
       errors.push({ err: err, code: code });
       return noop
     }
   }
 
   function createCompileToFunctionFn (compile) {
+    // 首先定义了一个 cache空对象(无原型), 目的是通过闭包缓存编译后的结果
     var cache = Object.create(null);
 
     return function compileToFunctions (
@@ -6579,11 +6701,14 @@
       options,
       vm
     ) {
+      // 首先通过extend克隆了一份 options(Vue中初始化时传入的options, 目的是为了防止污染原始options, 是个浅拷贝)
       options = extend({}, options);
+      // 获取warn函数, 在开发环境中于控制台发送警告
       var warn$1 = options.warn || warn;
       delete options.warn;
 
       /* istanbul ignore if */
+      // 这里主要是判断当前环境是否支持eval或动态生成函数去执行, 若不行, 则开发环境报错
       {
         // detect possible CSP restriction
         try {
@@ -6602,17 +6727,28 @@
       }
 
       // check cache
+      // 1. 读取缓存中的 compiledFunctionResult 对象, 如果有则直接返回
       var key = options.delimiters
         ? String(options.delimiters) + template
         : template;
       if (cache[key]) {
+        // 判断缓存中是否有结果, 如果有则直接获取缓存中编译后的渲染函数返回, 不必再次编译
+        // 空间换时间
+        // 模板内容作为key, delimiters这个属性只有完整版的vue才有, 编译时才会使用, 作用是改变插值表达式使用的符号
+        // 差值表达式默认使用{{}}, 通过这个属性, 可以将插值表达式改成任意的内容, 比如模板字符串
         return cache[key]
       }
 
       // compile
+      // 2. 将模板编译为编译对象(render, staticRenderFns), 字符串形式的js代码
+      // 调用compile开始进行编译, 将模板和用户传入的选项传递给compile
+      // 编译结束后会返回一个对象, 内部有render 和 staticRenderFns两个成员
+      // 此时的render函数中, 存储的是字符串形式的js代码
       var compiled = compile(template, options);
 
       // check compilation errors/tips
+      // 上述compile生成的对象中还有两个辅助属性, 一个是errors, 一个是tips
+      // 在编译过程中, 会遇到一些错误信息, 这里在开发环境下将这些信息打印出来
       {
         if (compiled.errors && compiled.errors.length) {
           if (options.outputSourceRange) {
@@ -6643,6 +6779,8 @@
       // turn code into functions
       var res = {};
       var fnGenErrors = [];
+      // 3. 把字符串形式的js代码转换成js方法
+      // 调用 createFunction 将字符串形式的js代码转换为函数
       res.render = createFunction(compiled.render, fnGenErrors);
       res.staticRenderFns = compiled.staticRenderFns.map(function (code) {
         return createFunction(code, fnGenErrors)
@@ -6652,6 +6790,7 @@
       // this should only happen if there is a bug in the compiler itself.
       // mostly for codegen development use
       /* istanbul ignore if */
+      // 开发环境打印编译产生的错误信息
       {
         if ((!compiled.errors || !compiled.errors.length) && fnGenErrors.length) {
           warn$1(
@@ -6667,6 +6806,9 @@
         }
       }
 
+      // 最后缓存结果并返回结果
+      // 最终的结果就是 render和staticRenderFns
+      // 4. 缓存并返回res对象(render, staticRenderFns方法)
       return (cache[key] = res)
     }
   }
@@ -6674,20 +6816,31 @@
   /*  */
 
   function createCompilerCreator (baseCompile) {
+    // baseOptions 平台相关的options
+    // src/platforms/web/compiler/options中定义
     return function createCompiler (baseOptions) {
       function compile (
+        // 模板
         template,
+        // 选项, 调用compileToFunctions传入的选项(可以认为是用户传入的, Vue也是编译器的用户)
         options
       ) {
+        // 创建了一个 finalOptions, 原型指向了 baseOptions, 作用是用于合并 compile传入的options和baseOptions
         var finalOptions = Object.create(baseOptions);
+        // 定义了两个数组
+        // 存储编译过程中产生的错误
         var errors = [];
+        // 存储编译过程中产生的信息
         var tips = [];
 
+        // 将消息放入对应的数组中
         var warn = function (msg, range, tip) {
           (tip ? tips : errors).push(msg);
         };
 
+        // 如果options存在, 则开始合并baseOptions和options
         if (options) {
+          // 开发环境重写warn函数
           if ( options.outputSourceRange) {
             // $flow-disable-line
             var leadingSpaceLength = template.match(/^\s*/)[0].length;
@@ -6707,17 +6860,20 @@
           }
           // merge custom modules
           if (options.modules) {
+            // 合并模块(浅拷贝直接合并到一个数组中)
             finalOptions.modules =
               (baseOptions.modules || []).concat(options.modules);
           }
           // merge custom directives
           if (options.directives) {
+            // 合并指令(baseOptions中的指令位于options.directives的原型上)
             finalOptions.directives = extend(
               Object.create(baseOptions.directives || null),
               options.directives
             );
           }
           // copy other options
+          // 直接拷贝除 模块 和 指令以外的成员
           for (var key in options) {
             if (key !== 'modules' && key !== 'directives') {
               finalOptions[key] = options[key];
@@ -6727,12 +6883,18 @@
 
         finalOptions.warn = warn;
 
+        // 模板编译的核心函数, 后续在看
+        // 通过baseCompile将模板编译成render函数, 返回的是一个对象, 这个对象有两个成员, 分别是render函数和staticRenderFns
+        // 此时的render中, 存储是字符串形式的js代码(上一节说过), 在入口函数 compileToFunctions中, 将字符串形式的js代码转换为了render函数
         var compiled = baseCompile(template.trim(), finalOptions);
         {
           detectErrors(compiled.ast, warn);
         }
+        // 在baseCompile中, 还会把编译的错误信息记录下来(通过调用finalOptions的warn方法, 将错误和信息记录到errors和tips数组中)
+        // 然后将这两个数组记录到compiled的对象中
         compiled.errors = errors;
         compiled.tips = tips;
+        // 最后返回该对象
         return compiled
       }
 
@@ -7043,6 +7205,7 @@
     seenObjects.clear();
   }
 
+  // * seen 用于防止循环引用, 这里主要是触发 getter, 让属性值深度收集当前 userWatcher 作为依赖
   function _traverse (val, seen) {
     var i, keys;
     var isA = Array.isArray(val);
@@ -7324,7 +7487,7 @@
       var Ctor;
       // * 如果在实例上存在$vnode并且$vnode.ns存在，那么ns就是实例上面$vnode的ns，如果不存在，则返回字符串类型的tag
       ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag);
-      // * isReservedTag用于判断tag是不是一个原生的保留标签
+      // * isReservedTag用于判断tag是不是一个常规标签
       if (config.isReservedTag(tag)) {
         // platform built-in elements
         // * 如果data存在并且有一个带native修饰符的on事件，则直接抛错
@@ -7359,7 +7522,7 @@
         );
       }
     } else {
-      // * 局部注册
+      // * 全局组件
       // * 如果该标签直接就是一个导入的组件，直接进入此处，通过createComponent创建组件VNode
       // direct component options / constructor
       vnode = createComponent(tag, data, context, children);
@@ -7723,6 +7886,7 @@
 
   /*  */
 
+  // 编译阶段使用
   function installRenderHelpers (target) {
     target._o = markOnce;
     target._n = toNumber;
@@ -8126,6 +8290,7 @@
   /*  */
 
   function resolveInject (inject, vm) {
+    // * 配置中inject不存在直接跳过
     if (inject) {
       // inject is :any because flow is not smart enough to figure out cached
       var result = Object.create(null);
@@ -8139,6 +8304,7 @@
         if (key === '__ob__') { continue }
         var provideKey = inject[key].from;
         var source = vm;
+        // * 寻找所有父级的provide
         while (source) {
           if (source._provided && hasOwn(source._provided, provideKey)) {
             result[key] = source._provided[provideKey];

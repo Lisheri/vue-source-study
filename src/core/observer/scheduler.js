@@ -192,7 +192,7 @@ export function queueWatcher (watcher: Watcher) {
       // * 在执行 flushSchedulerQueue 下面的watcher.run()的时候又一次进入了queueWatcher的时候, 就会执行这个else下面的内容
       // if already flushing, splice the watcher based on its id
       // if already past its id, it will be run next immediately.
-      // * 先拿到queue这个队列的最后一个的索引
+      // * 队尾索引
       let i = queue.length - 1
       // * 这里的index表示在执行 flushSchedulerQueue 的时候遍历的那个的索引
       while (i > index && queue[i].id > watcher.id) {

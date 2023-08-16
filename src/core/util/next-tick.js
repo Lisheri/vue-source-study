@@ -12,7 +12,7 @@ let pending = false
 
 function flushCallbacks () {
   pending = false
-  // * 深拷贝 callbacks 数组第一层
+  // * 浅拷贝 callbacks 数组第一层
   const copies = callbacks.slice(0)
   callbacks.length = 0 // * 清空callbacks数组
   for (let i = 0; i < copies.length; i++) {

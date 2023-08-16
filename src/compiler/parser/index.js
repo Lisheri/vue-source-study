@@ -57,6 +57,7 @@ let platformMustUseProp
 let platformGetTagNamespace
 let maybeComponent
 
+// 这个函数非常简单, 就是返回了一个对象, 这个对象就是AST对象
 export function createASTElement (
   tag: string,
   attrs: Array<ASTAttr>,
@@ -65,7 +66,9 @@ export function createASTElement (
   return {
     type: 1,
     tag,
+     // 标签的属性数组, 这里面是存储了一个一个属性对, 内容为{name: 属性名, value: 属性值, start: 开始位置, end: 结束位置}
     attrsList: attrs,
+    // 通过调用 makeAttrsMap, 将上面的属性数组, 转换为对象的形式, 键名就是属性名, 简直就是属性值, 去除了开始结束位置
     attrsMap: makeAttrsMap(attrs),
     rawAttrsMap: {},
     parent,
@@ -203,6 +206,7 @@ export function parse (
   }
 
   // 2 调用parseHTML对模板进行解析(核心)
+  // 当parseHTML处理完毕后, 就把模板全部转换成了AST对象
   parseHTML(template, {
     warn,
     expectHTML: options.expectHTML,
@@ -212,8 +216,9 @@ export function parse (
     shouldDecodeNewlinesForHref: options.shouldDecodeNewlinesForHref,
     shouldKeepComment: options.comments,
     outputSourceRange: options.outputSourceRange,
-    // 解析过程中的回调函数, 生成AST
+    // 解析过程中的回调函数, 生成AST, 这里的start, end, chars, comment, 都是处理完对应的内容之后来调用的
     start (tag, attrs, unary, start, end) {
+      // start方法是在解析到开始标签后调用的
       // check namespace.
       // inherit parent ns if there is one
       const ns = (currentParent && currentParent.ns) || platformGetTagNamespace(tag)
@@ -224,11 +229,13 @@ export function parse (
         attrs = guardIESVGBug(attrs)
       }
 
+      // 在start方法中, 调用了 createASTElement, 创建AST对象
       let element: ASTElement = createASTElement(tag, attrs, currentParent)
       if (ns) {
         element.ns = ns
       }
 
+      // 生成AST之后, 开始给各种属性去赋值
       if (process.env.NODE_ENV !== 'production') {
         if (options.outputSourceRange) {
           element.start = start
@@ -268,6 +275,7 @@ export function parse (
       }
 
       if (!inVPre) {
+        // 开始处理指令, processPre用于处理v-pre这个指令
         processPre(element)
         if (element.pre) {
           inVPre = true
@@ -280,8 +288,12 @@ export function parse (
         processRawAttrs(element)
       } else if (!element.processed) {
         // structural directives
+        // 处理结构化指令
+        // v-for
         processFor(element)
+        // v-if
         processIf(element)
+        // v-once
         processOnce(element)
       }
 
@@ -404,7 +416,9 @@ export function parse (
 }
 
 function processPre (el) {
+  // 调用了 getAndRemoveAttr 函数用于获取 v-pre指令, 然后再从AST中移除对应的属性
   if (getAndRemoveAttr(el, 'v-pre') != null) {
+    // 如果该属性存在, 则会通过pre这个属性记录到AST中
     el.pre = true
   }
 }
@@ -531,22 +545,29 @@ export function parseFor (exp: string): ?ForParseResult {
   return res
 }
 
+// 处理v-if
 function processIf (el) {
+  // 首先获取AST上v-if指令的值, 如果有, 则从AST中删除, 并返回该值, 记录到exp
   const exp = getAndRemoveAttr(el, 'v-if')
   if (exp) {
+    // 将v-if的值记录到el.if属性中
     el.if = exp
+    // 调用 addIfCondition, 
     addIfCondition(el, {
       exp: exp,
       block: el
     })
   } else {
+    // 接着处理v-else
     if (getAndRemoveAttr(el, 'v-else') != null) {
       el.else = true
     }
+    // 处理v-else-if
     const elseif = getAndRemoveAttr(el, 'v-else-if')
     if (elseif) {
       el.elseif = elseif
     }
+    // 过程都是相似的, 就是在AST对象的属性中记录相关的数据
   }
 }
 
@@ -584,10 +605,13 @@ function findPrevElement (children: Array<any>): ASTElement | void {
   }
 }
 
+// 这个函数的作用就是把当前v-if的值和对应的AST对象一起存储到ifConditions数组中
 export function addIfCondition (el: ASTElement, condition: ASTIfCondition) {
   if (!el.ifConditions) {
+    // 初始化ifConditions数组
     el.ifConditions = []
   }
+  // 将当前v-if对象({ exp, el })存储到ifConditions数组中
   el.ifConditions.push(condition)
 }
 

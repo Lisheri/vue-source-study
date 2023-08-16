@@ -16,6 +16,7 @@ export function traverse (val: any) {
   seenObjects.clear()
 }
 
+// * seen 用于防止循环引用, 这里主要是触发 getter, 让属性值深度收集当前 userWatcher 作为依赖
 function _traverse (val: any, seen: SimpleSet) {
   let i, keys
   const isA = Array.isArray(val)

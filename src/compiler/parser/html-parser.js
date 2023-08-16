@@ -14,15 +14,22 @@ import { isNonPhrasingTag } from 'web/compiler/util'
 import { unicodeRegExp } from 'core/util/lang'
 
 // Regular Expressions for parsing tags and attributes
+// 在这里定义了一堆正则表达式, 作用是用于匹配html字符串模板中的内容
+// 匹配标签中的属性, 其中包括指令
 const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
 const dynamicArgAttribute = /^\s*((?:v-[\w-]+:|@|:|#)\[[^=]+?\][^\s"'<>\/=]*)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
 const ncname = `[a-zA-Z_][\\-\\.0-9_a-zA-Z${unicodeRegExp.source}]*`
 const qnameCapture = `((?:${ncname}\\:)?${ncname})`
+// 匹配打开的开始标签
 const startTagOpen = new RegExp(`^<${qnameCapture}`)
+// 匹配闭合的开始标签
 const startTagClose = /^\s*(\/?)>/
+// 匹配结束标签
 const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`)
+// 匹配文档声明
 const doctype = /^<!DOCTYPE [^>]+>/i
 // #7298: escape - to avoid being passed as HTML comment when inlined in page
+// 匹配文档中的注释
 const comment = /^<!\--/
 const conditionalComment = /^<!\[/
 
@@ -58,6 +65,8 @@ export function parseHTML (html, options) {
   const canBeLeftOpenTag = options.canBeLeftOpenTag || no
   let index = 0
   let last, lastTag
+  // html就是模板字符串
+  // 他会将处理完的文本截取掉, 继续去处理剩余的部分
   while (html) {
     last = html
     // Make sure we're not in a plaintext content element like script/style
@@ -65,19 +74,25 @@ export function parseHTML (html, options) {
       let textEnd = html.indexOf('<')
       if (textEnd === 0) {
         // Comment:
+        // 处理注释
         if (comment.test(html)) {
           const commentEnd = html.indexOf('-->')
 
           if (commentEnd >= 0) {
             if (options.shouldKeepComment) {
+              // 如果当前找到注释标签, 并且调用comment方法后
+              // 这个comment, 是调用parseHTML时, 传递进来的方法
               options.comment(html.substring(4, commentEnd), index, index + commentEnd + 3)
             }
+            // 调用advance, 这个方法的作用就是记录最新处理的位置, 然后从处理完毕的位置, 截取剩余html
             advance(commentEnd + 3)
+            // 继续去处理剩余的html, 直到处理完毕
             continue
           }
         }
 
         // http://en.wikipedia.org/wiki/Conditional_comment#Downlevel-revealed_conditional_comment
+        // 继续通过正则匹配是否为条件注释（<!--[if IE 9]> 仅IE9可识别 <![endif]-->）这种
         if (conditionalComment.test(html)) {
           const conditionalEnd = html.indexOf(']>')
 
@@ -88,6 +103,7 @@ export function parseHTML (html, options) {
         }
 
         // Doctype:
+        // 文档声明
         const doctypeMatch = html.match(doctype)
         if (doctypeMatch) {
           advance(doctypeMatch[0].length)
@@ -95,6 +111,7 @@ export function parseHTML (html, options) {
         }
 
         // End tag:
+        // 结束标签
         const endTagMatch = html.match(endTag)
         if (endTagMatch) {
           const curIndex = index
@@ -105,6 +122,7 @@ export function parseHTML (html, options) {
 
         // Start tag:
         const startTagMatch = parseStartTag()
+        // 判断是否是开始标签
         if (startTagMatch) {
           handleStartTag(startTagMatch)
           if (shouldIgnoreFirstNewline(startTagMatch.tagName, html)) {
@@ -180,7 +198,9 @@ export function parseHTML (html, options) {
   parseEndTag()
 
   function advance (n) {
+    // 首先记录当前最新的位置
     index += n
+    // 然后从处理完毕的位置, 截取html
     html = html.substring(n)
   }
 
@@ -209,6 +229,7 @@ export function parseHTML (html, options) {
     }
   }
 
+  // 这里做了很多处理, 还会解析标签中的属性
   function handleStartTag (match) {
     const tagName = match.tagName
     const unarySlash = match.unarySlash
@@ -248,6 +269,8 @@ export function parseHTML (html, options) {
     }
 
     if (options.start) {
+      // 当对开始标签处理完毕后, 最终调用了options.start这个方法, 并把解析好的标签名, 属性, 是否一元标签(自闭和), 起始结束位置, 传递给start方法
+      // start方法是调用parseHTML时传递进来的
       options.start(tagName, attrs, unary, match.start, match.end)
     }
   }
